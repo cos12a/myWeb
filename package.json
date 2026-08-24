@@ -1,0 +1,19 @@
+{
+  "name": "mywebbun",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run --smol src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "hono": "^4.13.3"
+  }
+}

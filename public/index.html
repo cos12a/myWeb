@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物联网学习和展示</title>
+    <meta name="theme-color" content="#0f0f15">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/icons/pwa-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/pwa-192x192.png">
+    <style>
+        :root {
+            --bg: #0f0f15;
+            --card-bg: #1a1a25;
+            --text: #e6e6ff;
+            --text-light: #a0a0c0;
+            --accent: #00d4ff;
+            --primary: #bb86fc;
+            --border: #2a2a3a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            padding: 40px 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #0f0f15, #151525);
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+            background: linear-gradient(to right, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-light);
+            max-width: 700px;
+            margin: 0 auto;
+            font-size: 1.1rem;
+        }
+
+        main {
+            flex: 1;
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 20px;
+            width: 100%;
+        }
+
+        section {
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            font-size: 1.6rem;
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+        }
+
+        .data-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            transition: transform 0.2s;
+        }
+
+        .data-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .data-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--accent);
+            margin: 10px 0;
+        }
+
+        .note {
+            color: var(--text-light);
+            font-style: italic;
+            margin-top: 10px;
+            font-size: 0.95rem;
+        }
+
+        footer {
+            background: linear-gradient(135deg, #0f0f15, #151525);
+            border-top: 1px solid var(--border);
+            padding: 20px;
+            text-align: center;
+            margin-top: auto;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 11px;
+            color: #555;
+        }
+
+        .footer-content a {
+            color: #555;
+            text-decoration: none;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .footer-content a:hover {
+            opacity: 1;
+            color: var(--accent);
+        }
+
+        .footer-divider {
+            color: #333;
+        }
+
+        .esp-card,
+        .tool-card {
+            background: var(--card-bg);
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+            overflow: hidden;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+        }
+
+        .esp-card:hover,
+        .tool-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 12px 28px rgba(0, 212, 255, 0.15);
+            border-color: var(--accent);
+        }
+
+        .esp-card-inner {
+            display: flex;
+            align-items: center;
+            padding: 28px 32px;
+            gap: 24px;
+        }
+
+        .esp-info,
+        .tool-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .esp-title,
+        .tool-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 2px;
+        }
+
+        .esp-url,
+        .tool-url {
+            font-size: 0.9rem;
+            color: var(--accent);
+            font-family: "Consolas", "Courier New", monospace;
+            margin-bottom: 10px;
+        }
+
+        .esp-desc,
+        .tool-desc {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+
+        .esp-arrow {
+            flex-shrink: 0;
+            font-size: 1.8rem;
+            color: var(--accent);
+            transition: transform 0.3s;
+        }
+
+        .esp-card:hover .esp-arrow {
+            transform: translateX(6px);
+        }
+
+        .tool-card {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tool-card-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 28px 20px;
+            gap: 16px;
+            flex: 1;
+        }
+
+        .tool-title {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+
+        .tool-url {
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+
+        .tool-desc {
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .tool-arrow {
+            font-size: 1.4rem;
+            color: var(--accent);
+            transition: transform 0.3s;
+        }
+
+        .tool-card:hover .tool-arrow {
+            transform: translateY(4px);
+        }
+
+        @media (max-width: 500px) {
+            .esp-card-inner {
+                flex-direction: column;
+                text-align: center;
+                padding: 20px;
+            }
+
+            .esp-arrow {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>物联网学习和展示</h1>
+        <p class="subtitle">记录网络编程实践 · 展示物联网设备实时数据 · 分享开发工具使用经验</p>
+    </header>
+
+    <main>
+        <section>
+            <h2>📊 实时物联网数据</h2>
+            <div class="data-grid" id="iot-data-grid">
+                <!-- 数据将通过 JS 从 Hono API 动态加载 -->
+                <div class="data-card">
+                    <div>温度</div>
+                    <div class="data-value">--°C</div>
+                    <div class="note">加载中...</div>
+                </div>
+                <div class="data-card">
+                    <div>湿度</div>
+                    <div class="data-value">--%</div>
+                    <div class="note">加载中...</div>
+                </div>
+                <div class="data-card">
+                    <div>设备在线数</div>
+                    <div class="data-value">--</div>
+                    <div class="note">加载中...</div>
+                </div>
+                <div class="data-card">
+                    <div>API 调用次数</div>
+                    <div class="data-value">--</div>
+                    <div class="note">加载中...</div>
+                </div>
+            </div>
+            <p style="margin-top:15px;color:var(--text-light);font-size:0.95rem;">
+                注：以上数据通过 Hono API 实时获取，实际生产环境可对接 MQTT/数据库。
+            </p>
+        </section>
+
+        <section>
+            <h2>🔧 设备管理中心</h2>
+            <div class="data-grid">
+                <a href="https://esp.unito.top/" target="_blank" class="esp-card">
+                    <div class="esp-card-inner">
+                        <div class="esp-icon">
+                            <svg width="80" height="80" viewBox="0 0 80 80" fill="none"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <rect x="8" y="8" width="64" height="64" rx="8" fill="#1a1a35" stroke="#00d4ff"
+                                    stroke-width="2" />
+                                <rect x="18" y="18" width="44" height="44" rx="4" fill="#0d0d20" stroke="#bb86fc"
+                                    stroke-width="1.5" />
+                                <rect x="28" y="28" width="24" height="24" rx="4" fill="#00d4ff" opacity="0.3" />
+                                <circle cx="40" cy="40" r="6" fill="#00d4ff" opacity="0.8" />
+                                <rect x="22" y="2" width="4" height="8" rx="1" fill="#bb86fc" />
+                                <rect x="32" y="2" width="4" height="8" rx="1" fill="#bb86fc" />
+                                <rect x="44" y="2" width="4" height="8" rx="1" fill="#bb86fc" />
+                                <rect x="54" y="2" width="4" height="8" rx="1" fill="#bb86fc" />
+                                <rect x="22" y="70" width="4" height="8" rx="1" fill="#bb86fc" />
+                                <rect x="32" y="70" width="4" height="8" rx="1" fill="#bb86fc" />
+                                <rect x="44" y="70" width="4" height="8" rx="1" fill="#bb86fc" />
+                                <rect x="54" y="70" width="4" height="8" rx="1" fill="#bb86fc" />
+                                <rect x="2" y="22" width="8" height="4" rx="1" fill="#bb86fc" />
+                                <rect x="2" y="32" width="8" height="4" rx="1" fill="#bb86fc" />
+                                <rect x="2" y="44" width="8" height="4" rx="1" fill="#bb86fc" />
+                                <rect x="2" y="54" width="8" height="4" rx="1" fill="#bb86fc" />
+                                <rect x="70" y="22" width="8" height="4" rx="1" fill="#bb86fc" />
+                                <rect x="70" y="32" width="8" height="4" rx="1" fill="#bb86fc" />
+                                <rect x="70" y="44" width="8" height="4" rx="1" fill="#bb86fc" />
+                                <rect x="70" y="54" width="8" height="4" rx="1" fill="#bb86fc" />
+                                <path d="M60 8 Q66 2 72 8" stroke="#00d4ff" stroke-width="1.5" fill="none"
+                                    opacity="0.6" />
+                                <circle cx="52" cy="36" r="2" fill="#4ade80" opacity="0.9">
+                                    <animate attributeName="opacity" values="0.4;1;0.4" dur="2s"
+                                        repeatCount="indefinite" />
+                                </circle>
+                            </svg>
+                        </div>
+                        <div class="esp-info">
+                            <div class="esp-title">ESP 设备面板</div>
+                            <div class="esp-url">esp.unito.top</div>
+                            <div class="esp-desc">管理 ESP32/ESP8266 物联网设备<br>查看实时状态 · 远程控制 · OTA 升级</div>
+                        </div>
+                        <div class="esp-arrow">→</div>
+                    </div>
+                </a>
+
+                <a href="/esp-web-tools.html" class="tool-card">
+                    <div class="tool-card-inner">
+                        <div class="tool-icon">
+                            <svg width="72" height="72" viewBox="0 0 72 72" fill="none"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <rect x="14" y="14" width="44" height="44" rx="6" fill="#1a1a35" stroke="#00d4ff"
+                                    stroke-width="2" />
+                                <rect x="22" y="22" width="28" height="28" rx="3" fill="#0d0d20" stroke="#bb86fc"
+                                    stroke-width="1.2" />
+                                <path d="M36 42 L36 54" stroke="#4ade80" stroke-width="3" stroke-linecap="round" />
+                                <path d="M30 48 L36 54 L42 48" stroke="#4ade80" stroke-width="3" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                                <circle cx="36" cy="34" r="2" fill="#00d4ff" opacity="0.8" />
+                                <rect x="20" y="8" width="4" height="6" rx="1" fill="#bb86fc" />
+                                <rect x="30" y="8" width="4" height="6" rx="1" fill="#bb86fc" />
+                                <rect x="38" y="8" width="4" height="6" rx="1" fill="#bb86fc" />
+                                <rect x="48" y="8" width="4" height="6" rx="1" fill="#bb86fc" />
+                                <rect x="20" y="58" width="4" height="6" rx="1" fill="#bb86fc" />
+                                <rect x="30" y="58" width="4" height="6" rx="1" fill="#bb86fc" />
+                                <rect x="38" y="58" width="4" height="6" rx="1" fill="#bb86fc" />
+                                <rect x="48" y="58" width="4" height="6" rx="1" fill="#bb86fc" />
+                            </svg>
+                        </div>
+                        <div class="tool-info">
+                            <div class="tool-title">ESP Web Tools</div>
+                            <div class="tool-url">固件烧录工具</div>
+                            <div class="tool-desc">浏览器端 ESP32/ESP8266 固件烧录<br>Web Serial API · Manifest 一键安装</div>
+                        </div>
+                        <div class="tool-arrow">↓</div>
+                    </div>
+                </a>
+
+                <a href="https://esp.unito.top/esp32PartitionBuilder/" target="_blank" class="tool-card">
+                    <div class="tool-card-inner">
+                        <div class="tool-icon">
+                            <svg width="72" height="72" viewBox="0 0 72 72" fill="none"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <rect x="10" y="10" width="52" height="52" rx="6" fill="#1a1a35" stroke="#00d4ff"
+                                    stroke-width="2" />
+                                <rect x="16" y="18" width="40" height="10" rx="3" fill="#bb86fc" opacity="0.7" />
+                                <rect x="16" y="31" width="25" height="10" rx="3" fill="#00d4ff" opacity="0.5" />
+                                <rect x="16" y="44" width="32" height="10" rx="3" fill="#4ade80" opacity="0.5" />
+                                <circle cx="52" cy="50" r="7" fill="none" stroke="#bb86fc" stroke-width="1.5"
+                                    opacity="0.7" />
+                                <circle cx="52" cy="50" r="3" fill="#bb86fc" opacity="0.5" />
+                            </svg>
+                        </div>
+                        <div class="tool-info">
+                            <div class="tool-title">分区表构建器</div>
+                            <div class="tool-url">esp32PartitionBuilder</div>
+                            <div class="tool-desc">可视化构建 ESP32 分区表<br>拖拽调整 · CSV 导出 · 一键生成</div>
+                        </div>
+                        <div class="tool-arrow">↓</div>
+                    </div>
+                </a>
+
+                <a href="https://esp.unito.top/WebSerialPlotter/" target="_blank" class="tool-card">
+                    <div class="tool-card-inner">
+                        <div class="tool-icon">
+                            <svg width="72" height="72" viewBox="0 0 72 72" fill="none"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <line x1="14" y1="56" x2="60" y2="56" stroke="#555" stroke-width="1.5" />
+                                <line x1="14" y1="56" x2="14" y2="10" stroke="#555" stroke-width="1.5" />
+                                <path d="M16 48 L22 38 L28 28 L34 34 L40 22 L46 30 L52 18 L58 26" stroke="#bb86fc"
+                                    stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                                <path d="M16 44 L22 46 L28 32 L34 38 L40 28 L46 22 L52 30 L58 20" stroke="#00d4ff"
+                                    stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"
+                                    opacity="0.7" />
+                                <circle cx="34" cy="34" r="3" fill="#bb86fc" opacity="0.8" />
+                                <circle cx="46" cy="22" r="3" fill="#00d4ff" opacity="0.8" />
+                                <rect x="28" y="56" width="16" height="8" rx="2" fill="#555" />
+                            </svg>
+                        </div>
+                        <div class="tool-info">
+                            <div class="tool-title">Web 串口绘图器</div>
+                            <div class="tool-url">WebSerialPlotter</div>
+                            <div class="tool-desc">浏览器端串口数据实时绘图<br>多通道 · 自动缩放 · WebSerial API</div>
+                        </div>
+                        <div class="tool-arrow">↓</div>
+                    </div>
+                </a>
+            </div>
+        </section>
+
+        <section>
+            <h2>📘 关于本站</h2>
+            <p>本网站为个人非经营性技术学习站点，主要用于：</p>
+            <ul style="margin-left:20px;margin-top:10px;">
+                <li>学习与实践 TCP/IP、WebSocket、MQTT 等网络协议编程</li>
+                <li>可视化展示自建物联网设备（如 ESP32、树莓派）采集的环境数据</li>
+                <li>记录 Postman、Wireshark、Docker、VS Code 等开发工具的使用技巧</li>
+            </ul>
+            <p style="margin-top:15px;">所有内容均为学习用途，不涉及商业行为，亦不收集用户个人信息。</p>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <span>© 2026 IoT Lab</span>
+            <span class="footer-divider">|</span>
+            <a href="https://beian.miit.gov.cn/" target="_blank">粤ICP备2025393310号-2</a>
+            <span class="footer-divider">|</span>
+            <span>粤公网安备 44030002011217号</span>
+        </div>
+    </footer>
+
+    <script>
+        // 从 Hono API 获取实时 IoT 数据
+        async function loadIoTData() {
+            try {
+                const res = await fetch('/api/iot-data');
+                const data = await res.json();
+                const grid = document.getElementById('iot-data-grid');
+                grid.innerHTML = `
+                    <div class="data-card"><div>温度</div><div class="data-value">${data.temperature}°C</div><div class="note">来自传感器 ${data.sensorId}</div></div>
+                    <div class="data-card"><div>湿度</div><div class="data-value">${data.humidity}%</div><div class="note">更新于 ${data.updatedAt}</div></div>
+                    <div class="data-card"><div>设备在线数</div><div class="data-value">${data.onlineDevices}</div><div class="note">共 ${data.totalDevices} 台设备</div></div>
+                    <div class="data-card"><div>API 调用次数</div><div class="data-value">${data.apiCalls.toLocaleString()}</div><div class="note">今日累计</div></div>
+                `;
+            } catch (e) {
+                console.error('Failed to load IoT data:', e);
+            }
+        }
+        loadIoTData();
+        // 每 30 秒自动刷新数据
+        setInterval(loadIoTData, 30000);
+
+
+        // 注册 PWA Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((reg) => console.log('✅ SW registered:', reg.scope))
+                    .catch((err) => console.error('❌ SW registration failed:', err));
+            });
+        }
+    </script>
+</body>
+
+</html>
