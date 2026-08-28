@@ -1,0 +1,20 @@
+{
+  "name": "serialflash",
+  "version": "0.1.0",
+  "description": "SerialFlash — Web Serial and CLI STM32 UART ISP flashing tool.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "serialflash": "./src/cli.js"
+  },
+  "scripts": {
+    "dev": "vite",
+    "start": "vite --port 8080",
+    "build": "vite build",
+    "test": "bun test",
+    "cli": "bun ./src/cli.js"
+  },
+  "devDependencies": {
+    "vite": "^8.2.1"
+  }
+}
