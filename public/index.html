@@ -4,489 +4,599 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>物联网学习和展示</title>
-    <meta name="theme-color" content="#0f0f15">
+    <title>Unito Lab | 智能设备研究与体验</title>
+    <meta name="description" content="探索智能加热设备、嵌入式开发与 Web IoT 工具，和同好一起把想法做成真正好用的产品。">
+    <meta name="theme-color" content="#f4efe7">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="icon" href="/icons/pwa-icon.svg" type="image/svg+xml">
+    <link rel="icon" href="/icons/pwa-icon.png" type="image/png">
     <link rel="apple-touch-icon" href="/icons/pwa-192x192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
+        rel="stylesheet">
     <style>
         :root {
-            --bg: #0f0f15;
-            --card-bg: #1a1a25;
-            --text: #e6e6ff;
-            --text-light: #a0a0c0;
-            --accent: #00d4ff;
-            --primary: #bb86fc;
-            --border: #2a2a3a;
+            --paper: #f4efe7;
+            --paper-deep: #e8ded1;
+            --ink: #1e2724;
+            --muted: #67716b;
+            --line: rgba(30, 39, 36, .14);
+            --orange: #dd653d;
+            --orange-dark: #a9412b;
+            --teal: #2b7771;
+            --cream: #fffaf1;
+            --shadow: 0 22px 60px rgba(83, 59, 35, .12);
         }
 
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
         }
 
         body {
-            background-color: var(--bg);
-            color: var(--text);
-            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-            line-height: 1.6;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
+            background: var(--paper);
+            color: var(--ink);
+            font-family: "Noto Sans SC", "DM Sans", sans-serif;
+            line-height: 1.65;
         }
 
-        header {
-            padding: 40px 20px;
-            text-align: center;
-            background: linear-gradient(135deg, #0f0f15, #151525);
-            border-bottom: 1px solid var(--border);
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: .28;
+            background-image: radial-gradient(rgba(30, 39, 36, .13) .7px, transparent .7px);
+            background-size: 9px 9px;
+            mask-image: linear-gradient(#000, transparent 75%);
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .shell {
+            position: relative;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 0 28px;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 0;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            text-decoration: none;
+            font-weight: 900;
+            letter-spacing: .04em;
+        }
+
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            border-radius: 10px 10px 10px 3px;
+            color: white;
+            background: var(--orange);
+            font-family: "DM Sans", sans-serif;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 26px;
+            color: var(--muted);
+            font-size: .88rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+        }
+
+        .nav-links a:hover {
+            color: var(--orange-dark);
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.05fr .95fr;
+            gap: 70px;
+            align-items: center;
+            min-height: 650px;
+            padding: 72px 0 92px;
+        }
+
+        .eyebrow,
+        .section-kicker {
+            color: var(--orange-dark);
+            text-transform: uppercase;
+            letter-spacing: .18em;
+            font: 700 .74rem "DM Sans", sans-serif;
+        }
+
+        .eyebrow {
+            margin-bottom: 20px;
         }
 
         h1 {
-            font-size: 2.5rem;
-            margin-bottom: 12px;
-            background: linear-gradient(to right, var(--primary), var(--accent));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
+            max-width: 650px;
+            font-size: clamp(3.1rem, 7vw, 6rem);
+            line-height: .98;
+            letter-spacing: -.055em;
+            font-weight: 900;
         }
 
-        .subtitle {
-            color: var(--text-light);
-            max-width: 700px;
-            margin: 0 auto;
-            font-size: 1.1rem;
+        h1 em {
+            color: var(--orange);
+            font-style: normal;
         }
 
-        main {
-            flex: 1;
-            max-width: 1000px;
-            margin: 40px auto;
-            padding: 0 20px;
-            width: 100%;
+        .hero-copy {
+            max-width: 570px;
+            margin-top: 25px;
+            color: var(--muted);
+            font-size: 1.08rem;
         }
 
-        section {
-            margin-bottom: 40px;
-        }
-
-        h2 {
-            color: var(--primary);
-            margin-bottom: 20px;
-            font-size: 1.6rem;
-        }
-
-        .data-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 20px;
-        }
-
-        .data-card {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            transition: transform 0.2s;
-        }
-
-        .data-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
-        }
-
-        .data-value {
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: var(--accent);
-            margin: 10px 0;
-        }
-
-        .note {
-            color: var(--text-light);
-            font-style: italic;
-            margin-top: 10px;
-            font-size: 0.95rem;
-        }
-
-        footer {
-            background: linear-gradient(135deg, #0f0f15, #151525);
-            border-top: 1px solid var(--border);
-            padding: 20px;
-            text-align: center;
-            margin-top: auto;
-        }
-
-        .footer-content {
+        .hero-actions {
             display: flex;
-            justify-content: center;
-            align-items: center;
             flex-wrap: wrap;
-            gap: 12px;
-            font-size: 11px;
-            color: #555;
+            align-items: center;
+            gap: 14px;
+            margin-top: 34px;
         }
 
-        .footer-content a {
-            color: #555;
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 19px;
+            border-radius: 6px;
             text-decoration: none;
-            opacity: 0.8;
-            transition: opacity 0.2s;
+            font-weight: 700;
+            font-size: .92rem;
+            transition: transform .2s, box-shadow .2s;
         }
 
-        .footer-content a:hover {
-            opacity: 1;
-            color: var(--accent);
+        .button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 22px rgba(169, 65, 43, .18);
         }
 
-        .footer-divider {
-            color: #333;
+        .button-primary {
+            color: white;
+            background: var(--orange);
         }
 
-        .esp-card,
-        .tool-card {
-            background: var(--card-bg);
-            border-radius: 14px;
-            border: 1px solid var(--border);
-            transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+        .button-quiet {
+            border: 1px solid var(--line);
+            background: rgba(255, 250, 241, .45);
+        }
+
+        .hero-note {
+            color: var(--muted);
+            font-size: .78rem;
+        }
+
+        .product-stage {
+            position: relative;
+            min-height: 440px;
+            display: grid;
+            place-items: center;
+        }
+
+        .product-stage::before {
+            content: "";
+            position: absolute;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            background: #e2cdbb;
+        }
+
+        .product {
+            position: relative;
+            width: min(100%, 410px);
+            aspect-ratio: 1/1.08;
+            border-radius: 34px;
+            transform: rotate(5deg);
+            background: linear-gradient(145deg, #e38a62, #a9442d);
+            box-shadow: 24px 27px 0 rgba(108, 67, 43, .12), var(--shadow);
             overflow: hidden;
-            cursor: pointer;
-            text-decoration: none;
-            display: block;
         }
 
-        .esp-card:hover,
+        .product::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            opacity: .34;
+            background: repeating-linear-gradient(105deg, transparent 0 5px, rgba(255, 245, 226, .16) 6px 7px);
+        }
+
+        .product-label {
+            position: absolute;
+            top: 27px;
+            left: 30px;
+            color: rgba(55, 25, 18, .65);
+            font: 700 .72rem "DM Sans", sans-serif;
+            letter-spacing: .2em;
+        }
+
+        .product-control {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 170px;
+            height: 170px;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 28%, #ffe0ce, #d85b38 60%, #9d3624);
+            box-shadow: 0 16px 28px rgba(87, 27, 16, .3), inset 0 2px 4px rgba(255, 255, 255, .65), inset 0 -5px 8px rgba(98, 22, 10, .3);
+            display: grid;
+            place-items: center;
+            color: #702719;
+            font: 900 1.25rem "DM Sans", sans-serif;
+        }
+
+        .product-control::after {
+            content: "";
+            position: absolute;
+            inset: -27px;
+            border: 12px solid rgba(255, 239, 221, .4);
+            border-left-color: rgba(255, 255, 255, .85);
+            border-radius: 50%;
+            transform: rotate(35deg);
+        }
+
+        .product-foot {
+            position: absolute;
+            bottom: 25px;
+            left: 30px;
+            color: rgba(255, 245, 226, .75);
+            font-size: .78rem;
+        }
+
+        .stage-tag {
+            position: absolute;
+            right: -2px;
+            bottom: 55px;
+            padding: 10px 14px;
+            background: var(--teal);
+            color: white;
+            font-size: .75rem;
+            font-weight: 700;
+            box-shadow: 8px 8px 0 rgba(43, 119, 113, .14);
+        }
+
+        .intro-band {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 70px;
+            padding: 38px 0 88px;
+            border-top: 1px solid var(--line);
+        }
+
+        .intro-band h2 {
+            font-size: 2rem;
+            line-height: 1.15;
+            letter-spacing: -.03em;
+            margin-top: 8px;
+        }
+
+        .intro-band p:last-child {
+            max-width: 680px;
+            color: var(--muted);
+            font-size: 1.05rem;
+        }
+
+        .tools-section {
+            padding: 0 0 100px;
+        }
+
+        .section-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 30px;
+            margin-bottom: 26px;
+        }
+
+        .section-heading h2 {
+            font-size: 2.4rem;
+            line-height: 1.1;
+            letter-spacing: -.04em;
+            margin-top: 7px;
+        }
+
+        .section-heading p:last-child {
+            max-width: 400px;
+            color: var(--muted);
+            font-size: .9rem;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+
+        .tool-card {
+            display: flex;
+            flex-direction: column;
+            min-height: 250px;
+            padding: 24px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: rgba(255, 250, 241, .62);
+            text-decoration: none;
+            transition: transform .25s, border-color .25s, box-shadow .25s;
+        }
+
         .tool-card:hover {
             transform: translateY(-6px);
-            box-shadow: 0 12px 28px rgba(0, 212, 255, 0.15);
-            border-color: var(--accent);
+            border-color: var(--orange);
+            box-shadow: var(--shadow);
         }
 
-        .esp-card-inner {
-            display: flex;
-            align-items: center;
-            padding: 28px 32px;
-            gap: 24px;
+        .tool-icon {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 30px;
+            border-radius: 50%;
+            background: var(--paper-deep);
+            color: var(--orange-dark);
+            font: 700 1.2rem "DM Sans", sans-serif;
         }
 
-        .esp-info,
-        .tool-info {
-            flex: 1;
-            min-width: 0;
+        .tool-card h3 {
+            font-size: 1.05rem;
+            margin-bottom: 6px;
         }
 
-        .esp-title,
-        .tool-title {
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: var(--text);
-            margin-bottom: 2px;
-        }
-
-        .esp-url,
-        .tool-url {
-            font-size: 0.9rem;
-            color: var(--accent);
-            font-family: "Consolas", "Courier New", monospace;
-            margin-bottom: 10px;
-        }
-
-        .esp-desc,
-        .tool-desc {
-            font-size: 0.9rem;
-            color: var(--text-light);
+        .tool-card p {
+            color: var(--muted);
+            font-size: .85rem;
             line-height: 1.6;
         }
 
-        .esp-arrow {
-            flex-shrink: 0;
-            font-size: 1.8rem;
-            color: var(--accent);
-            transition: transform 0.3s;
+        .tool-link {
+            margin-top: auto;
+            padding-top: 18px;
+            color: var(--orange-dark);
+            font: 700 .78rem "DM Sans", sans-serif;
         }
 
-        .esp-card:hover .esp-arrow {
-            transform: translateX(6px);
+        .tool-card.featured {
+            background: var(--ink);
+            color: white;
+            border-color: var(--ink);
         }
 
-        .tool-card {
+        .tool-card.featured p {
+            color: #bdc7bf;
+        }
+
+        .tool-card.featured .tool-icon {
+            color: white;
+            background: var(--orange);
+        }
+
+        .tool-card.featured .tool-link {
+            color: #ffae8d;
+        }
+
+        .closing {
+            display: grid;
+            grid-template-columns: 1.1fr .9fr;
+            gap: 60px;
+            padding: 62px 0 90px;
+            border-top: 1px solid var(--line);
+        }
+
+        .closing h2 {
+            max-width: 550px;
+            font-size: 2.7rem;
+            line-height: 1.08;
+            letter-spacing: -.045em;
+        }
+
+        .closing h2 span {
+            color: var(--teal);
+        }
+
+        .closing-copy {
+            color: var(--muted);
+        }
+
+        .closing-copy p+p {
+            margin-top: 16px;
+        }
+
+        footer {
+            padding: 22px 0 34px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: .76rem;
+        }
+
+        .footer-row {
             display: flex;
-            flex-direction: column;
+            justify-content: space-between;
+            gap: 20px;
         }
 
-        .tool-card-inner {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            padding: 28px 20px;
-            gap: 16px;
-            flex: 1;
+        footer a {
+            text-decoration: none;
         }
 
-        .tool-title {
-            font-size: 1.1rem;
-            margin-bottom: 4px;
+        footer a:hover {
+            color: var(--orange-dark);
         }
 
-        .tool-url {
-            font-size: 0.8rem;
-            margin-bottom: 8px;
-            word-break: break-all;
-        }
-
-        .tool-desc {
-            font-size: 0.85rem;
-            line-height: 1.5;
-        }
-
-        .tool-arrow {
-            font-size: 1.4rem;
-            color: var(--accent);
-            transition: transform 0.3s;
-        }
-
-        .tool-card:hover .tool-arrow {
-            transform: translateY(4px);
-        }
-
-        @media (max-width: 500px) {
-            .esp-card-inner {
-                flex-direction: column;
-                text-align: center;
-                padding: 20px;
+        @media (max-width:760px) {
+            .shell {
+                padding: 0 20px
             }
 
-            .esp-arrow {
-                display: none;
+            .nav-links {
+                display: none
+            }
+
+            .hero {
+                grid-template-columns: 1fr;
+                gap: 28px;
+                min-height: auto;
+                padding: 58px 0 70px
+            }
+
+            h1 {
+                font-size: clamp(3rem, 15vw, 5rem)
+            }
+
+            .product-stage {
+                min-height: 350px
+            }
+
+            .product {
+                width: min(84vw, 360px)
+            }
+
+            .intro-band,
+            .closing {
+                grid-template-columns: 1fr;
+                gap: 20px;
+                padding-bottom: 65px
+            }
+
+            .section-heading {
+                display: block
+            }
+
+            .section-heading p:last-child {
+                margin-top: 13px
+            }
+
+            .tools-grid {
+                grid-template-columns: 1fr
+            }
+
+            .tool-card {
+                min-height: 205px
+            }
+
+            .footer-row {
+                display: block
+            }
+
+            .footer-row span {
+                display: block;
+                margin-top: 8px
             }
         }
     </style>
 </head>
 
 <body>
-    <header>
-        <h1>物联网学习和展示</h1>
-        <p class="subtitle">记录网络编程实践 · 展示物联网设备实时数据 · 分享开发工具使用经验</p>
-    </header>
-
-    <main>
-        <section>
-            <h2>📊 实时物联网数据</h2>
-            <div class="data-grid" id="iot-data-grid">
-                <!-- 数据将通过 JS 从 Hono API 动态加载 -->
-                <div class="data-card">
-                    <div>温度</div>
-                    <div class="data-value">--°C</div>
-                    <div class="note">加载中...</div>
-                </div>
-                <div class="data-card">
-                    <div>湿度</div>
-                    <div class="data-value">--%</div>
-                    <div class="note">加载中...</div>
-                </div>
-                <div class="data-card">
-                    <div>设备在线数</div>
-                    <div class="data-value">--</div>
-                    <div class="note">加载中...</div>
-                </div>
-                <div class="data-card">
-                    <div>API 调用次数</div>
-                    <div class="data-value">--</div>
-                    <div class="note">加载中...</div>
-                </div>
+    <div class="shell">
+        <nav aria-label="主导航">
+            <a class="brand" href="/"><span class="brand-mark">U</span><span>UNITO LAB</span></a>
+            <div class="nav-links"><a href="#tools">开发工具</a><a href="#about">关于实验室</a><a href="/stoov-test/">进入体验</a>
             </div>
-            <p style="margin-top:15px;color:var(--text-light);font-size:0.95rem;">
-                注：以上数据通过 Hono API 实时获取，实际生产环境可对接 MQTT/数据库。
-            </p>
-        </section>
-
-        <section>
-            <h2>🔧 设备管理中心</h2>
-            <div class="data-grid">
-                <a href="https://esp.unito.top/" target="_blank" class="esp-card">
-                    <div class="esp-card-inner">
-                        <div class="esp-icon">
-                            <svg width="80" height="80" viewBox="0 0 80 80" fill="none"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <rect x="8" y="8" width="64" height="64" rx="8" fill="#1a1a35" stroke="#00d4ff"
-                                    stroke-width="2" />
-                                <rect x="18" y="18" width="44" height="44" rx="4" fill="#0d0d20" stroke="#bb86fc"
-                                    stroke-width="1.5" />
-                                <rect x="28" y="28" width="24" height="24" rx="4" fill="#00d4ff" opacity="0.3" />
-                                <circle cx="40" cy="40" r="6" fill="#00d4ff" opacity="0.8" />
-                                <rect x="22" y="2" width="4" height="8" rx="1" fill="#bb86fc" />
-                                <rect x="32" y="2" width="4" height="8" rx="1" fill="#bb86fc" />
-                                <rect x="44" y="2" width="4" height="8" rx="1" fill="#bb86fc" />
-                                <rect x="54" y="2" width="4" height="8" rx="1" fill="#bb86fc" />
-                                <rect x="22" y="70" width="4" height="8" rx="1" fill="#bb86fc" />
-                                <rect x="32" y="70" width="4" height="8" rx="1" fill="#bb86fc" />
-                                <rect x="44" y="70" width="4" height="8" rx="1" fill="#bb86fc" />
-                                <rect x="54" y="70" width="4" height="8" rx="1" fill="#bb86fc" />
-                                <rect x="2" y="22" width="8" height="4" rx="1" fill="#bb86fc" />
-                                <rect x="2" y="32" width="8" height="4" rx="1" fill="#bb86fc" />
-                                <rect x="2" y="44" width="8" height="4" rx="1" fill="#bb86fc" />
-                                <rect x="2" y="54" width="8" height="4" rx="1" fill="#bb86fc" />
-                                <rect x="70" y="22" width="8" height="4" rx="1" fill="#bb86fc" />
-                                <rect x="70" y="32" width="8" height="4" rx="1" fill="#bb86fc" />
-                                <rect x="70" y="44" width="8" height="4" rx="1" fill="#bb86fc" />
-                                <rect x="70" y="54" width="8" height="4" rx="1" fill="#bb86fc" />
-                                <path d="M60 8 Q66 2 72 8" stroke="#00d4ff" stroke-width="1.5" fill="none"
-                                    opacity="0.6" />
-                                <circle cx="52" cy="36" r="2" fill="#4ade80" opacity="0.9">
-                                    <animate attributeName="opacity" values="0.4;1;0.4" dur="2s"
-                                        repeatCount="indefinite" />
-                                </circle>
-                            </svg>
-                        </div>
-                        <div class="esp-info">
-                            <div class="esp-title">ESP 设备面板</div>
-                            <div class="esp-url">esp.unito.top</div>
-                            <div class="esp-desc">管理 ESP32/ESP8266 物联网设备<br>查看实时状态 · 远程控制 · OTA 升级</div>
-                        </div>
-                        <div class="esp-arrow">→</div>
+        </nav>
+        <main>
+            <section class="hero">
+                <div>
+                    <p class="eyebrow">Independent IoT · 深圳</p>
+                    <h1>把舒适感，<em>做成产品。</em></h1>
+                    <p class="hero-copy">这里记录智能硬件从一块电路板到真实体验的全过程。正在研究 Stoov 智能加热垫、ESP 设备和连接它们的 Web 工具，也欢迎喜欢动手的人一起交流。</p>
+                    <div class="hero-actions"><a class="button button-primary" href="/stoov-test/">体验 Stoov 加热垫
+                            <span>↗</span></a><a class="button button-quiet" href="#tools">浏览开发工具</a><span
+                            class="hero-note">可直接在线试用</span></div>
+                </div>
+                <div class="product-stage" aria-label="Stoov 加热垫概念展示">
+                    <div class="product"><span class="product-label">STOOV / BED</span>
+                        <div class="product-control">WARM</div><span class="product-foot">身体与脚部 · 独立控温</span>
+                    </div><span class="stage-tag">正在开发 · 可体验</span>
+                </div>
+            </section>
+            <section class="intro-band" id="about">
+                <div>
+                    <p class="section-kicker">Why Unito Lab</p>
+                    <h2>为好奇心，留一张工作台。</h2>
+                </div>
+                <p>我相信好产品应该既让人想拥有，也让人忍不住想拆开研究。本站把硬件调试、通信协议、串口工具和使用体验放在一起，既展示正在做的东西，也分享可以马上上手的工具。你可以先体验，再一起把它做得更好。</p>
+            </section>
+            <section class="tools-section" id="tools">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-kicker">Build / Test / Explore</p>
+                        <h2>项目开发工具</h2>
                     </div>
-                </a>
-
-                <a href="/esp-web-tools.html" class="tool-card">
-                    <div class="tool-card-inner">
-                        <div class="tool-icon">
-                            <svg width="72" height="72" viewBox="0 0 72 72" fill="none"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <rect x="14" y="14" width="44" height="44" rx="6" fill="#1a1a35" stroke="#00d4ff"
-                                    stroke-width="2" />
-                                <rect x="22" y="22" width="28" height="28" rx="3" fill="#0d0d20" stroke="#bb86fc"
-                                    stroke-width="1.2" />
-                                <path d="M36 42 L36 54" stroke="#4ade80" stroke-width="3" stroke-linecap="round" />
-                                <path d="M30 48 L36 54 L42 48" stroke="#4ade80" stroke-width="3" stroke-linecap="round"
-                                    stroke-linejoin="round" />
-                                <circle cx="36" cy="34" r="2" fill="#00d4ff" opacity="0.8" />
-                                <rect x="20" y="8" width="4" height="6" rx="1" fill="#bb86fc" />
-                                <rect x="30" y="8" width="4" height="6" rx="1" fill="#bb86fc" />
-                                <rect x="38" y="8" width="4" height="6" rx="1" fill="#bb86fc" />
-                                <rect x="48" y="8" width="4" height="6" rx="1" fill="#bb86fc" />
-                                <rect x="20" y="58" width="4" height="6" rx="1" fill="#bb86fc" />
-                                <rect x="30" y="58" width="4" height="6" rx="1" fill="#bb86fc" />
-                                <rect x="38" y="58" width="4" height="6" rx="1" fill="#bb86fc" />
-                                <rect x="48" y="58" width="4" height="6" rx="1" fill="#bb86fc" />
-                            </svg>
-                        </div>
-                        <div class="tool-info">
-                            <div class="tool-title">ESP Web Tools</div>
-                            <div class="tool-url">固件烧录工具</div>
-                            <div class="tool-desc">浏览器端 ESP32/ESP8266 固件烧录<br>Web Serial API · Manifest 一键安装</div>
-                        </div>
-                        <div class="tool-arrow">↓</div>
-                    </div>
-                </a>
-
-                <a href="https://esp.unito.top/esp32PartitionBuilder/" target="_blank" class="tool-card">
-                    <div class="tool-card-inner">
-                        <div class="tool-icon">
-                            <svg width="72" height="72" viewBox="0 0 72 72" fill="none"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <rect x="10" y="10" width="52" height="52" rx="6" fill="#1a1a35" stroke="#00d4ff"
-                                    stroke-width="2" />
-                                <rect x="16" y="18" width="40" height="10" rx="3" fill="#bb86fc" opacity="0.7" />
-                                <rect x="16" y="31" width="25" height="10" rx="3" fill="#00d4ff" opacity="0.5" />
-                                <rect x="16" y="44" width="32" height="10" rx="3" fill="#4ade80" opacity="0.5" />
-                                <circle cx="52" cy="50" r="7" fill="none" stroke="#bb86fc" stroke-width="1.5"
-                                    opacity="0.7" />
-                                <circle cx="52" cy="50" r="3" fill="#bb86fc" opacity="0.5" />
-                            </svg>
-                        </div>
-                        <div class="tool-info">
-                            <div class="tool-title">分区表构建器</div>
-                            <div class="tool-url">esp32PartitionBuilder</div>
-                            <div class="tool-desc">可视化构建 ESP32 分区表<br>拖拽调整 · CSV 导出 · 一键生成</div>
-                        </div>
-                        <div class="tool-arrow">↓</div>
-                    </div>
-                </a>
-
-                <a href="https://esp.unito.top/WebSerialPlotter/" target="_blank" class="tool-card">
-                    <div class="tool-card-inner">
-                        <div class="tool-icon">
-                            <svg width="72" height="72" viewBox="0 0 72 72" fill="none"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <line x1="14" y1="56" x2="60" y2="56" stroke="#555" stroke-width="1.5" />
-                                <line x1="14" y1="56" x2="14" y2="10" stroke="#555" stroke-width="1.5" />
-                                <path d="M16 48 L22 38 L28 28 L34 34 L40 22 L46 30 L52 18 L58 26" stroke="#bb86fc"
-                                    stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-                                <path d="M16 44 L22 46 L28 32 L34 38 L40 28 L46 22 L52 30 L58 20" stroke="#00d4ff"
-                                    stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"
-                                    opacity="0.7" />
-                                <circle cx="34" cy="34" r="3" fill="#bb86fc" opacity="0.8" />
-                                <circle cx="46" cy="22" r="3" fill="#00d4ff" opacity="0.8" />
-                                <rect x="28" y="56" width="16" height="8" rx="2" fill="#555" />
-                            </svg>
-                        </div>
-                        <div class="tool-info">
-                            <div class="tool-title">Web 串口绘图器</div>
-                            <div class="tool-url">WebSerialPlotter</div>
-                            <div class="tool-desc">浏览器端串口数据实时绘图<br>多通道 · 自动缩放 · WebSerial API</div>
-                        </div>
-                        <div class="tool-arrow">↓</div>
-                    </div>
-                </a>
-            </div>
-        </section>
-
-        <section>
-            <h2>📘 关于本站</h2>
-            <p>本网站为个人非经营性技术学习站点，主要用于：</p>
-            <ul style="margin-left:20px;margin-top:10px;">
-                <li>学习与实践 TCP/IP、WebSocket、MQTT 等网络协议编程</li>
-                <li>可视化展示自建物联网设备（如 ESP32、树莓派）采集的环境数据</li>
-                <li>记录 Postman、Wireshark、Docker、VS Code 等开发工具的使用技巧</li>
-            </ul>
-            <p style="margin-top:15px;">所有内容均为学习用途，不涉及商业行为，亦不收集用户个人信息。</p>
-        </section>
-    </main>
-
-    <footer>
-        <div class="footer-content">
-            <span>© 2026 IoT Lab</span>
-            <span class="footer-divider">|</span>
-            <a href="https://beian.miit.gov.cn/" target="_blank">粤ICP备2025393310号-2</a>
-            <span class="footer-divider">|</span>
-            <span>粤公网安备 44030002011217号</span>
-        </div>
-    </footer>
-
-    <script>
-        // 从 Hono API 获取实时 IoT 数据
-        async function loadIoTData() {
-            try {
-                const res = await fetch('/api/iot-data');
-                const data = await res.json();
-                const grid = document.getElementById('iot-data-grid');
-                grid.innerHTML = `
-                    <div class="data-card"><div>温度</div><div class="data-value">${data.temperature}°C</div><div class="note">来自传感器 ${data.sensorId}</div></div>
-                    <div class="data-card"><div>湿度</div><div class="data-value">${data.humidity}%</div><div class="note">更新于 ${data.updatedAt}</div></div>
-                    <div class="data-card"><div>设备在线数</div><div class="data-value">${data.onlineDevices}</div><div class="note">共 ${data.totalDevices} 台设备</div></div>
-                    <div class="data-card"><div>API 调用次数</div><div class="data-value">${data.apiCalls.toLocaleString()}</div><div class="note">今日累计</div></div>
-                `;
-            } catch (e) {
-                console.error('Failed to load IoT data:', e);
-            }
-        }
-        loadIoTData();
-        // 每 30 秒自动刷新数据
-        setInterval(loadIoTData, 30000);
-
-
-        // 注册 PWA Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((reg) => console.log('✅ SW registered:', reg.scope))
-                    .catch((err) => console.error('❌ SW registration failed:', err));
-            });
-        }
-    </script>
+                    <p>从设备控制到固件烧录，所有入口都来自真实的开发和测试需求。</p>
+                </div>
+                <div class="tools-grid">
+                    <a class="tool-card featured" href="/stoov-test/"><span class="tool-icon">+</span>
+                        <h3>Stoov 加热垫测试</h3>
+                        <p>串口连接、遥控与加热测试、MQTT 数据上报。打开浏览器就能看到正在打磨的完整体验。</p><span class="tool-link">立即体验 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/stoov-corr/"><span class="tool-icon">◌</span>
+                        <h3>Stoov 控制面板</h3>
+                        <p>用于加热垫遥控、温度调节与传感器标定的实验面板，适合深入了解设备控制逻辑。</p><span class="tool-link">打开面板 ↗</span>
+                    </a>
+                    <a class="tool-card" href="https://esp.unito.top/" target="_blank" rel="noreferrer"><span
+                            class="tool-icon">⌁</span>
+                        <h3>ESP 设备面板</h3>
+                        <p>管理 ESP32 / ESP8266 设备，查看状态、远程控制，并尝试 OTA 升级。</p><span class="tool-link">访问设备面板 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/esp-web-tools.html"><span class="tool-icon">↓</span>
+                        <h3>ESP Web Tools</h3>
+                        <p>浏览器端固件烧录工具，支持 Web Serial API 与 Manifest 一键安装。</p><span class="tool-link">开始烧录 ↗</span>
+                    </a>
+                    <a class="tool-card" href="https://esp.unito.top/esp32PartitionBuilder/" target="_blank"
+                        rel="noreferrer"><span class="tool-icon">▦</span>
+                        <h3>ESP32 分区表构建器</h3>
+                        <p>可视化调整分区，导出 CSV，让固件空间规划不再靠猜。</p><span class="tool-link">构建分区表 ↗</span>
+                    </a>
+                    <a class="tool-card" href="https://esp.unito.top/WebSerialPlotter/" target="_blank"
+                        rel="noreferrer"><span class="tool-icon">⌁</span>
+                        <h3>Web 串口绘图器</h3>
+                        <p>把串口数据变成实时曲线，多通道观察设备状态，调试效率立刻不一样。</p><span class="tool-link">查看实时曲线 ↗</span>
+                    </a>
+                </div>
+            </section>
+            <section class="closing">
+                <h2>喜欢研究，也喜欢<br><span>把成品带回家。</span></h2>
+                <div class="closing-copy">
+                    <p>Stoov 加热垫仍在持续迭代中。你可以在线体验测试工具，了解它如何连接、控制和校准设备。</p>
+                    <p>如果你在寻找一件真正有温度的智能硬件，或者也在做 ESP、MQTT、串口相关项目，欢迎从这里开始。</p><a class="button button-primary"
+                        href="/stoov-test/" style="margin-top:22px;">看看正在做的产品 ↗</a>
+                </div>
+            </section>
+        </main>
+        <footer>
+            <div class="footer-row"><strong>UNITO LAB · 做有温度的 IoT</strong><span>© 2026 · <a
+                        href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">粤ICP备2025393310号-2</a> ·
+                    粤公网安备 44030002011217号</span></div>
+        </footer>
+    </div>
+    <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));</script>
 </body>
 
 </html>

@@ -1,11 +1,11 @@
-const CACHE_NAME = "iot-lab-v1";
+const CACHE_NAME = "iot-lab-v2";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
   "/style.css",
   "/manifest.json",
   "/favicon.ico",
-  "/icons/pwa-icon.svg",
+  "/icons/pwa-icon.png",
   "/icons/pwa-192x192.png",
   "/esp-web-tools.html",
 ];
@@ -36,6 +36,16 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
+  // Service Worker Cache API 只支持 http(s)，跳过浏览器扩展等其他协议。
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return;
+  }
+
+  // 只处理 GET 请求，避免缓存 POST、PUT 等请求。
+  if (event.request.method !== "GET") {
+    return;
+  }
+
   // IoT 实时数据 API → 永远走网络，不缓存
   if (url.pathname.startsWith("/api/")) {
     return; // 默认网络请求
@@ -47,11 +57,14 @@ self.addEventListener("fetch", (event) => {
       if (cached) return cached;
       return fetch(event.request).then((response) => {
         // 仅缓存成功的 GET 请求
-        if (response.ok && event.request.method === "GET") {
+        if (response.ok) {
           const clone = response.clone();
           caches
             .open(CACHE_NAME)
-            .then((cache) => cache.put(event.request, clone));
+            .then((cache) => cache.put(event.request, clone))
+            .catch(() => {
+              // 缓存失败不应影响正常网络响应。
+            });
         }
         return response;
       });

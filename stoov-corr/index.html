@@ -1,0 +1,3536 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d1117" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="加热垫控制" />
+    <title>Stoov Bed 加热垫控制面板</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: #21262d;
+            --bg-input: #0d1117;
+            --bg-hover: #30363d;
+            --border-color: #30363d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-cyan: #00d9ff;
+            --accent-orange: #ff6b35;
+            --temp-body: #ff6b6b;
+            --temp-foot: #4ecdc4;
+            --btn-primary: #238636;
+            --btn-primary-hover: #2ea043;
+            --spacing-xs: 3px;
+            --spacing-sm: 6px;
+            --spacing-md: 10px;
+            --spacing-lg: 16px;
+            --radius-sm: 4px;
+            --radius-md: 8px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family:
+                "Inter",
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: var(--spacing-md);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: var(--spacing-md);
+        }
+
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-blue), #a371f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* 页面脚本版本号显示 */
+        .page-version {
+            margin-top: 4px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-family: "JetBrains Mono", monospace;
+            letter-spacing: 0.5px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+        }
+
+        .card-title {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-sm);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .card-title svg {
+            width: 12px;
+            height: 12px;
+            opacity: 0.7;
+        }
+
+        /* 顶部控制区域 */
+        .top-controls {
+            display: flex;
+            gap: var(--spacing-md);
+            align-items: stretch;
+        }
+
+        @media (max-width: 900px) {
+            .top-controls {
+                flex-wrap: wrap;
+            }
+        }
+
+        .control-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-sm) var(--spacing-md);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .control-box.serial-box {
+            min-width: 140px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .control-box.ble-box {
+            min-width: 140px;
+            border-left: 3px solid var(--accent-cyan);
+        }
+
+        .control-box.playback-box {
+            flex: 1;
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .control-box.cycle-box {
+            min-width: 160px;
+            border-left: 3px solid #a371f7;
+        }
+
+        .control-box.mqtt-box {
+            min-width: 140px;
+            border-left: 3px solid var(--accent-orange);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-xs);
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            transition: all 0.3s;
+        }
+
+        .status-dot.connected {
+            background: var(--accent-green);
+            box-shadow: 0 0 6px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected-cyan {
+            background: var(--accent-cyan);
+            box-shadow: 0 0 6px var(--accent-cyan);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected-orange {
+            background: var(--accent-orange);
+            box-shadow: 0 0 6px var(--accent-orange);
+            animation: pulse 2s infinite;
+        }
+
+        /* OTA 指示灯 */
+        .ota-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #555;
+            transition: all 0.3s;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .ota-dot.active {
+            background: #a371f7;
+            box-shadow: 0 0 10px #a371f7, 0 0 20px rgba(163, 113, 247, 0.5);
+            animation: ota-pulse 1s infinite;
+        }
+
+        @keyframes ota-pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 6px #a371f7;
+            }
+
+            50% {
+                box-shadow: 0 0 18px #a371f7, 0 0 30px rgba(163, 113, 247, 0.7);
+            }
+        }
+
+        .ota-text {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #888;
+            margin-left: 4px;
+            transition: color 0.3s;
+        }
+
+        .ota-text.active {
+            color: #a371f7;
+        }
+
+        .btn-ota {
+            background: linear-gradient(135deg, #a371f7, #7c3aed);
+            color: #fff;
+            border: none;
+        }
+
+        .btn-ota:hover:not(:disabled) {
+            box-shadow: 0 0 15px rgba(163, 113, 247, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-ota:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .status-text {
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .status-text.connected {
+            color: var(--accent-green);
+        }
+
+        .status-text.connected-cyan {
+            color: var(--accent-cyan);
+        }
+
+        .status-text.connected-orange {
+            color: var(--accent-orange);
+        }
+
+        /* 全局按钮基础样式 */
+        .btn {
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border: 1px solid transparent;
+        }
+
+        /* —— 开始加热：主操作 —— */
+        .btn-primary {
+            background: #27AE60;
+            color: white;
+            border-color: #219653;
+        }
+
+        .btn-primary:hover {
+            background: #219653;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        /* —— 停止加热 / 断开蓝牙：危险操作 —— */
+        .btn-danger {
+            background: #E74C3C;
+            color: white;
+            border-color: #C0392B;
+        }
+
+        .btn-danger:hover {
+            background: #C0392B;
+            transform: translateY(-1px);
+        }
+
+        .btn-danger:active {
+            transform: translateY(0);
+        }
+
+        /* —— 清除：中性辅助操作 —— */
+        .btn-outline {
+            background: transparent;
+            color: #95A5A6;
+            border-color: #95A5A6;
+        }
+
+        .btn-outline:hover {
+            background: #95A5A6;
+            color: white;
+        }
+
+        .btn-outline:active {
+            background: #7F8C8D;
+        }
+
+        /* 禁用状态统一处理 */
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+
+        .btn svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        /* .btn-primary {
+            background: var(--btn-primary);
+            color: white;
+            margin-top: var(--spacing-xs);
+        } */
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--btn-primary-hover);
+        }
+
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            border-color: var(--accent-blue);
+        }
+
+        /* .btn-danger {
+            background: transparent;
+            color: var(--accent-red);
+            border-color: var(--accent-red);
+        } */
+
+        .btn-danger:hover:not(:disabled) {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .btn-cyan {
+            background: linear-gradient(135deg, var(--accent-cyan), #0099cc);
+            color: var(--bg-primary);
+            margin-top: var(--spacing-xs);
+        }
+
+        .btn-cyan:hover:not(:disabled) {
+            box-shadow: 0 0 15px rgba(0, 217, 255, 0.4);
+        }
+
+        /* .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        } */
+
+        /* 底部 BLE 区域 */
+        .bottom-ble {
+            display: flex;
+            gap: var(--spacing-md);
+        }
+
+        @media (max-width: 768px) {
+            .bottom-ble {
+                flex-direction: column;
+            }
+        }
+
+        .ble-write-box {
+            width: 280px;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 768px) {
+            .ble-write-box {
+                width: 100%;
+            }
+        }
+
+        .write-section {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+
+        .write-input {
+            flex: 1;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 8px 10px;
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.8rem;
+            color: var(--text-primary);
+            outline: none;
+        }
+
+        .write-input:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        .write-input:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .write-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .send-btn {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+            padding: 8px 12px;
+            font-size: 0.75rem;
+        }
+
+        .ble-log-box {
+            flex: 1;
+        }
+
+        .log-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            height: 500px;
+            overflow-y: auto;
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.75rem;
+            padding: 10px;
+        }
+
+        .log-container::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .log-container::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        .log-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .log-empty {
+            color: var(--text-muted);
+            text-align: center;
+            padding: 40px 0;
+            font-style: italic;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+            display: flex;
+            gap: 8px;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-3px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            flex-shrink: 0;
+            font-size: 0.7rem;
+        }
+
+        .log-type {
+            flex-shrink: 0;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .log-type.recv {
+            background: rgba(0, 217, 255, 0.2);
+            color: var(--accent-cyan);
+        }
+
+        .log-type.send {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--accent-green);
+        }
+
+        .log-type.info {
+            background: rgba(139, 148, 158, 0.2);
+            color: var(--text-secondary);
+        }
+
+        .log-type.error {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--accent-red);
+        }
+
+        .log-data {
+            color: var(--accent-cyan);
+            word-break: break-all;
+            flex: 1;
+        }
+
+        .log-data.send-data {
+            color: var(--accent-green);
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .log-header .card-title {
+            margin-bottom: 0;
+        }
+
+        .clear-btn {
+            font-size: 0.7rem;
+            padding: 4px 8px;
+        }
+
+        /* 原有样式 */
+        .setting-row {
+            display: flex;
+            gap: var(--spacing-md);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .setting-item label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .setting-item .unit {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        input[type="number"] {
+            width: 48px;
+            padding: 5px 3px;
+            font-size: 0.75rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            outline: none;
+            text-align: center;
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+        }
+
+        input[type="number"]:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .playback-row {
+            display: flex;
+            gap: var(--spacing-sm);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .current-time-display {
+            font-family: "Courier New", monospace;
+            font-size: 1.25rem;
+            color: var(--accent-green);
+            font-weight: bold;
+            min-width: 100px;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            min-width: 80px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg,
+                    var(--accent-blue),
+                    var(--accent-green));
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .btn-play {
+            min-width: 70px;
+        }
+
+        .btn-play.playing {
+            background: var(--accent-red);
+        }
+
+        .btn-play.playing:hover:not(:disabled) {
+            background: #d94341;
+        }
+
+        .temp-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: var(--spacing-md);
+        }
+
+        @media (max-width: 900px) {
+            .temp-display {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .temp-box {
+            position: relative;
+            padding: var(--spacing-md);
+            text-align: center;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+            border: 2px solid transparent;
+        }
+
+        .temp-box.body {
+            border-color: rgba(255, 107, 107, 0.3);
+        }
+
+        .temp-box.foot {
+            border-color: rgba(78, 205, 196, 0.3);
+        }
+
+        .temp-box::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: var(--radius-md) var(--radius-md) 0 0;
+        }
+
+        .temp-box.body::before {
+            background: var(--temp-body);
+        }
+
+        .temp-box.foot::before {
+            background: var(--temp-foot);
+        }
+
+        /* 修改 Grid 容器：让左侧列紧凑，右侧列撑满 */
+        .temp-header-grid {
+            display: grid;
+            grid-template-columns: max-content 2fr;
+            align-items: center;
+            /* 垂直居中 */
+            column-gap: 0px;
+            /* 左右两列之间的间距，可根据需要调整 */
+            padding-right: 60px;
+            /* 可选：防止大数字贴到最右边边框 */
+        }
+
+        /* 左侧列：垂直排列两个小字 */
+        .temp-header-grid .left-col {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            /* 上下两行文字的间距 */
+            justify-content: center;
+            /* 垂直居中 */
+        }
+
+        /* 调整文字大小，使其看起来协调 */
+        .temp-header-grid .temp-target {
+            font-size: 0.85rem;
+            /* 稍微调大一点点，或者保持原样 */
+            opacity: 0.8;
+            line-height: 1.4;
+        }
+
+        /* === 关键修改：让右侧列内容右对齐 === */
+        .temp-header-grid .right-col {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            /* 👈 核心：让内部子元素右对齐 */
+            justify-content: center;
+            height: 100%;
+            min-width: 0;
+            /* 防止 flex 容器收缩过度 */
+        }
+
+        /* 标签保持左对齐（但整体在右侧列里是右对齐的容器中） */
+        .temp-header-grid .temp-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 2px;
+            text-align: left;
+            /* 标签本身左对齐，但整个容器右对齐 */
+        }
+
+        .temp-header-grid .temp-value {
+            font-size: 1.6rem;
+            font-weight: 800;
+            line-height: 1;
+            display: inline-flex;
+            /* 关键：让数字和单位在同一行 */
+            align-items: baseline;
+            /* 关键：基线对齐，单位自动贴底 */
+            gap: 2px;
+            /* 数字与单位间距 */
+        }
+
+        .temp-header-grid .temp-unit {
+            font-size: 0.75rem;
+            /* 单位稍小 */
+            font-weight: 400;
+            opacity: 0.6;
+            /* 移除所有 position / transform / top/right */
+            position: static;
+            transform: none;
+            margin: 0;
+        }
+
+        .temp-label {
+            color: var(--text-secondary);
+        }
+
+        .temp-target {
+            opacity: 0.6;
+        }
+
+        .temp-value {
+            font-size: 2rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            position: relative;
+            display: inline-block;
+            padding-top: 0.05em;
+            transform: translateY(-6px);
+        }
+
+        .temp-unit {
+            position: absolute;
+            top: -0.8em;
+            right: -1.4em;
+            font-size: 0.75rem;
+            font-weight: 400;
+            opacity: 0.35;
+        }
+
+        .temp-box.body .temp-value {
+            color: var(--temp-body);
+        }
+
+        .temp-box.foot .temp-value {
+            color: var(--temp-foot);
+        }
+
+        /* ========== 温度横排布局 ========== */
+        .temp-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            padding: 4px 0;
+        }
+
+        .temp-sep {
+            color: #444;
+            font-size: 1rem;
+            font-weight: 300;
+            user-select: none;
+        }
+
+        .temp-value-inline {
+            font-weight: 800;
+            font-size: 1.6rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .temp-target-value {
+            font-weight: 800;
+            font-size: 1.6rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .temp-box.body .temp-value-inline {
+            color: var(--temp-body);
+        }
+
+        .temp-box.foot .temp-value-inline {
+            color: var(--temp-foot);
+        }
+
+        /* ========== 环境设置温度卡片（醒目） ========== */
+        .temp-box.ambient {
+            border: 2px solid rgba(255, 193, 7, 0.7);
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(255, 193, 7, 0.22), transparent 70%),
+                linear-gradient(160deg, #2b2410, var(--bg-secondary));
+            box-shadow: 0 0 18px rgba(255, 193, 7, 0.45), inset 0 0 22px rgba(255, 193, 7, 0.08);
+        }
+
+        .temp-box.ambient::before {
+            background: linear-gradient(90deg, #ffc107, #ff9800, #ff5722, #ff9800, #ffc107);
+        }
+
+        .temp-box.ambient .temp-value-inline {
+            color: #ffc107;
+            font-size: 2.4rem;
+            text-shadow: 0 0 12px rgba(255, 193, 7, 0.8);
+        }
+
+        /* 实时温度与环境温度差异显示 */
+        .env-diff {
+            font-size: 1.4rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            margin-left: 8px;
+            white-space: nowrap;
+            display: inline-block;
+            vertical-align: baseline;
+        }
+
+        .env-diff.high {
+            color: #ff9800;
+            text-shadow: 0 0 10px rgba(255, 152, 0, 0.7);
+        }
+
+        .env-diff.low {
+            color: #4ecdc4;
+            text-shadow: 0 0 10px rgba(78, 205, 196, 0.7);
+        }
+
+        .env-diff.ok {
+            color: #3fb950;
+            text-shadow: 0 0 10px rgba(63, 185, 80, 0.7);
+        }
+
+        /* 新温度数据到达指示（无论值是否变化都闪烁提示） */
+        .temp-box.temp-flash {
+            animation: temp-flash-common 0.5s ease-out;
+        }
+
+        .temp-box.body.temp-flash {
+            animation-name: temp-flash-body;
+        }
+
+        .temp-box.foot.temp-flash {
+            animation-name: temp-flash-foot;
+        }
+
+        @keyframes temp-flash-common {
+            0% {
+                box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.85), inset 0 0 28px rgba(88, 166, 255, 0.3);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(88, 166, 255, 0), inset 0 0 0 rgba(88, 166, 255, 0);
+            }
+        }
+
+        @keyframes temp-flash-body {
+            0% {
+                box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.9), inset 0 0 28px rgba(255, 107, 107, 0.4);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 107, 107, 0), inset 0 0 0 rgba(255, 107, 107, 0);
+            }
+        }
+
+        @keyframes temp-flash-foot {
+            0% {
+                box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.9), inset 0 0 28px rgba(78, 205, 196, 0.4);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(78, 205, 196, 0), inset 0 0 0 rgba(78, 205, 196, 0);
+            }
+        }
+
+        /* 环境温度设置弹窗 */
+        .ambient-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: rgba(0, 0, 0, 0.75);
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .ambient-modal.show {
+            display: flex;
+        }
+
+        .ambient-modal-box {
+            width: 100%;
+            max-width: 440px;
+            background: #1a1a2e;
+            border: 2px solid #ffc107;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 0 40px rgba(255, 193, 7, 0.55);
+            animation: ambient-modal-in 0.25s ease;
+        }
+
+        @keyframes ambient-modal-in {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .ambient-modal-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #ffc107;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+
+        .ambient-modal-warnings {
+            background: rgba(255, 87, 34, 0.12);
+            border: 1px dashed rgba(255, 87, 34, 0.6);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            font-size: 0.8rem;
+            line-height: 1.8;
+            color: #ffb74d;
+        }
+
+        .ambient-modal-warnings strong {
+            color: #ff5722;
+        }
+
+        .ambient-modal-input-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .ambient-modal-input-row input {
+            width: 140px;
+            padding: 10px 8px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-align: center;
+            background: var(--bg-input);
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            color: #ffc107;
+            outline: none;
+            font-family: "JetBrains Mono", monospace;
+        }
+
+        .ambient-modal-unit {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #ffc107;
+        }
+
+        .ambient-modal-btns {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .ambient-modal-btns button {
+            padding: 9px 22px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+        }
+
+        .ambient-modal-cancel {
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+        }
+
+        .ambient-modal-cancel:hover {
+            background: #3a3f47;
+        }
+
+        .ambient-modal-confirm {
+            background: linear-gradient(135deg, #ffc107, #ff9800);
+            color: #1a1200;
+            box-shadow: 0 0 14px rgba(255, 152, 0, 0.5);
+        }
+
+        .ambient-modal-confirm:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 0 20px rgba(255, 152, 0, 0.8);
+        }
+
+        .chart-section {
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-sm);
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+        }
+
+        .chart-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .chart-title svg {
+            width: 16px;
+            height: 16px;
+            color: var(--text-secondary);
+        }
+
+        .chart-wrapper {
+            height: 250px;
+            position: relative;
+        }
+
+        .curve-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-md);
+        }
+
+        @media (max-width: 900px) {
+            .curve-section {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .curve-panel {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            border: 1px solid var(--border-color);
+            opacity: 1;
+            transition: opacity 0.3s;
+        }
+
+        .curve-panel.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .curve-panel.body-curve {
+            border-left: 3px solid var(--temp-body);
+        }
+
+        .curve-panel.foot-curve {
+            border-left: 3px solid var(--temp-foot);
+        }
+
+        .curve-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .curve-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .curve-panel.body-curve .curve-title {
+            color: var(--temp-body);
+        }
+
+        .curve-panel.foot-curve .curve-title {
+            color: var(--temp-foot);
+        }
+
+        .curve-indicator {
+            width: 14px;
+            height: 3px;
+            border-radius: 2px;
+        }
+
+        .curve-panel.body-curve .curve-indicator {
+            background: var(--temp-body);
+        }
+
+        .curve-panel.foot-curve .curve-indicator {
+            background: var(--temp-foot);
+        }
+
+        .curve-content {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-sm);
+        }
+
+        .curve-chart-wrapper {
+            height: 150px;
+            position: relative;
+        }
+
+        .input-row {
+            display: flex;
+            gap: var(--spacing-sm);
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .input-item {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .input-item label {
+            color: var(--text-secondary);
+            font-size: 0.65rem;
+            white-space: nowrap;
+        }
+
+        .input-item .sep {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+
+        .btn-add {
+            flex: 1;
+            padding: 6px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .curve-panel.body-curve .btn-add {
+            background: var(--temp-body);
+            color: white;
+        }
+
+        .curve-panel.foot-curve .btn-add {
+            background: var(--temp-foot);
+            color: white;
+        }
+
+        .btn-add:hover:not(:disabled) {
+            filter: brightness(1.1);
+        }
+
+        .btn-delete-group {
+            padding: 6px 10px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.7rem;
+            cursor: pointer;
+            background: rgba(255, 107, 107, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            font-family: inherit;
+        }
+
+        .btn-delete-group:hover:not(:disabled) {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .points-list {
+            max-height: 130px;
+            overflow-y: auto;
+        }
+
+        .points-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .points-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        .point-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: var(--radius-sm);
+            margin-bottom: 4px;
+            font-size: 0.75rem;
+            gap: 6px;
+        }
+
+        .point-item.default-point {
+            background: rgba(88, 166, 255, 0.08);
+            border: 1px dashed rgba(88, 166, 255, 0.3);
+        }
+
+        .point-item input.temp-input {
+            width: 55px;
+            padding: 3px;
+            font-size: 0.75rem;
+        }
+
+        .point-time {
+            color: var(--accent-blue);
+            font-family: "Courier New", monospace;
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }
+
+        .point-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            background: rgba(88, 166, 255, 0.15);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .point-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .point-delete {
+            background: rgba(255, 107, 107, 0.2);
+            border: none;
+            color: var(--accent-red);
+            padding: 2px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            opacity: 0.6;
+        }
+
+        .point-delete:hover {
+            opacity: 1;
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .point-delete:disabled {
+            opacity: 0.2;
+            cursor: not-allowed;
+        }
+
+        .empty-points {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 16px;
+            font-size: 0.7rem;
+        }
+
+        .serial-warning {
+            font-size: 0.65rem;
+            color: var(--accent-red);
+            margin-top: 3px;
+            display: none;
+        }
+
+        .serial-warning.show {
+            display: block;
+        }
+
+        .device-info-group {
+            display: flex;
+            align-items: center;
+            font-size: 0.85em;
+            color: #888;
+            margin-left: 20px;
+        }
+
+        .device-info-item {
+            margin: 0 4px;
+        }
+
+        .separator {
+            margin: 0 8px;
+            color: #444;
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        /* ========== 移动端响应式 ========== */
+        @media (max-width: 768px) {
+            body {
+                padding: var(--spacing-xs);
+            }
+
+            .header h1 {
+                font-size: 1rem;
+            }
+
+            .header {
+                margin-bottom: var(--spacing-sm);
+            }
+
+            /* 卡片 */
+            .card {
+                padding: var(--spacing-sm);
+            }
+
+            .card-title {
+                font-size: 0.6rem;
+            }
+
+            /* 顶部控制区 */
+            .top-controls {
+                flex-direction: column;
+            }
+
+            .control-box {
+                width: 100%;
+            }
+
+            .playback-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--spacing-sm);
+            }
+
+            .current-time-display {
+                font-size: 1rem;
+                min-width: auto;
+            }
+
+            .progress-bar {
+                width: 100%;
+                min-width: auto;
+            }
+
+            /* 状态显示 */
+            .status-displays {
+                gap: 8px;
+                margin: 0;
+            }
+
+            .status-item {
+                font-size: 0.8em;
+            }
+
+            /* 设置行 */
+            .setting-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--spacing-sm);
+            }
+
+            .device-info-group {
+                margin-left: 0;
+                flex-wrap: wrap;
+            }
+
+            /* 温度显示 */
+            .temp-display {
+                grid-template-columns: 1fr;
+            }
+
+            .temp-row {
+                gap: 8px;
+            }
+
+            .temp-value-inline,
+            .temp-target-value {
+                font-size: 1.3rem;
+            }
+
+            .temp-sep {
+                display: none;
+            }
+
+            /* 传感器标定 */
+            .sensor-cal-grid {
+                flex-direction: column;
+            }
+
+            .sensor-cal-row {
+                flex-wrap: wrap;
+                gap: var(--spacing-sm);
+            }
+
+            input.sensor-cal-input {
+                width: 70px;
+                font-size: 0.78rem;
+            }
+
+            input.sensor-cal-input-wide {
+                width: 120px;
+            }
+
+            .sensor-cal-btn {
+                padding: 7px 14px;
+                font-size: 0.75rem;
+            }
+
+            .sensor-cal-clear-btn {
+                padding: 7px 12px;
+                font-size: 0.72rem;
+            }
+
+            /* 当前标定值 */
+            .sensor-cal-current-row {
+                gap: 6px;
+            }
+
+            .sensor-cal-get-btn,
+            .sensor-cal-clear-all-btn {
+                padding: 6px 14px;
+                font-size: 0.72rem;
+            }
+
+            /* 硬件运行时间 */
+            .hardware-uptime {
+                min-width: 70px;
+                font-size: 0.85em;
+                padding: 4px 8px;
+            }
+
+            /* 通信面板 */
+            .comm-panel {
+                padding: var(--spacing-sm);
+            }
+
+            .comm-row {
+                flex-wrap: wrap;
+                min-width: auto;
+                padding: 8px;
+                gap: 6px;
+            }
+
+            .comm-btn {
+                padding: 6px 12px;
+                font-size: 0.72rem;
+            }
+
+            .comm-check-group {
+                margin-left: 0;
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            /* 按钮统一增大触摸区域 */
+            .btn {
+                padding: 8px 14px;
+                font-size: 14px;
+            }
+
+            /* 日志容器 */
+            .log-container {
+                height: 300px;
+                font-size: 0.7rem;
+            }
+
+            /* 故障/复位按钮行 */
+            .card div[style*="display: flex"] {
+                gap: var(--spacing-xs) !important;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 0.9rem;
+            }
+
+            .card {
+                padding: var(--spacing-xs);
+            }
+
+            .comm-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .comm-check-group {
+                justify-content: flex-start;
+                width: 100%;
+            }
+
+            .sensor-cal-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .sensor-cal-label {
+                min-width: auto;
+            }
+
+            input.sensor-cal-input,
+            input.sensor-cal-input-wide {
+                width: 100%;
+            }
+
+            .sensor-cal-field {
+                width: 100%;
+            }
+
+            .sensor-cal-btn,
+            .sensor-cal-clear-btn {
+                width: 100%;
+                text-align: center;
+                justify-content: center;
+                margin-left: 0;
+            }
+
+            .temp-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 3px;
+            }
+
+            .log-container {
+                height: 250px;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .current-time-display {
+                font-size: 0.9rem;
+            }
+
+            .status-displays {
+                flex-direction: column;
+                gap: 4px;
+            }
+        }
+
+        .hardware-uptime {
+            font-weight: bold;
+            color: #4ade80;
+            /* 或你喜欢的绿色/蓝色 */
+            margin-left: 8px;
+            min-width: 80px;
+            /* 保证宽度，避免闪烁 */
+            display: inline-block;
+        }
+
+        /* 在 <style> 标签内添加 */
+        .status-displays {
+            display: flex;
+            gap: 15px;
+            /* 水平间距 */
+            align-items: center;
+            /* 垂直居中 */
+            margin: 0 10px;
+            /* 左右留点空间 */
+            flex-wrap: wrap;
+            /* 如果空间不够，允许换行 */
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            /* 防止标签和值被拆分 */
+        }
+
+        .status-label {
+            font-size: 0.9em;
+            color: #aaa;
+            /* 灰色标签 */
+            margin-right: 4px;
+        }
+
+        .status-value {
+            font-weight: bold;
+            /* 可以根据状态动态改变颜色，例如下面的 .status-running, .status-suspended */
+            min-width: 60px;
+            /* 保证最小宽度，减少因文字长短变化造成的 UI 跳动 */
+        }
+
+        /* 可选：根据状态添加不同颜色 */
+        .status-running {
+            color: #4ade80;
+        }
+
+        /* 加热中 - 绿色 */
+        .status-paused {
+            color: #fbbf24;
+        }
+
+        /* 暂停 - 黄色 */
+        .status-off {
+            color: #ef4444;
+        }
+
+        .hardware-uptime {
+            display: inline-block;
+            min-width: 80px;
+            text-align: center;
+            background-color: #2a2f3a;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #4ecdc4;
+            margin: 0 5px;
+        }
+
+        /* 遥控器图片容器 */
+        .remote-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+
+        .remote-img {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            border-radius: var(--radius-md);
+        }
+
+        .remote-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .remote-text {
+            position: absolute;
+            text-align: center;
+        }
+
+        .remote-body-temp {
+            top: 28%;
+            left: 50%;
+            transform: translate(-50%, 0);
+        }
+
+        .remote-foot-temp {
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, 0);
+        }
+
+        .remote-status {
+            top: 85%;
+            left: 50%;
+            transform: translate(-50%, 0);
+        }
+
+        .remote-label {
+            display: block;
+            font-size: 0.6rem;
+            color: #aaa;
+            margin-bottom: 2px;
+        }
+
+        .remote-value {
+            display: block;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #fff;
+            text-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 0 4px rgba(0, 0, 0, 0.6);
+        }
+
+        /* 已关闭 - 红色 */
+
+        /* ========== 船形开关 (Rocker Switch) ========== */
+        .rocker-switch {
+            position: relative;
+            display: inline-block;
+            width: 170px;
+            height: 46px;
+            margin-left: auto;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .rocker-switch input {
+            display: none;
+        }
+
+        .rocker-slider {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, #2a2a3e, #1a1a2a);
+            border-radius: 23px;
+            border: 2px solid #444;
+            box-shadow:
+                inset 0 3px 6px rgba(0, 0, 0, 0.6),
+                0 2px 4px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .rocker-slider::before {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 4px;
+            width: 50%;
+            height: calc(100% - 6px);
+            background: linear-gradient(180deg, #5a5a7e, #3a3a5e);
+            border-radius: 20px;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow:
+                0 3px 8px rgba(0, 0, 0, 0.5),
+                inset 0 1px 1px rgba(255, 255, 255, 0.15);
+            z-index: 0;
+        }
+
+        .rocker-switch input:checked+.rocker-slider::before {
+            transform: translateX(95%);
+            background: linear-gradient(180deg, #e87040, #b84520);
+            box-shadow:
+                0 3px 8px rgba(232, 112, 64, 0.4),
+                inset 0 1px 1px rgba(255, 255, 255, 0.2);
+        }
+
+        .rocker-left,
+        .rocker-right {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 13px;
+            font-weight: 700;
+            z-index: 1;
+            pointer-events: none;
+            transition: color 0.3s ease;
+            letter-spacing: 1px;
+        }
+
+        .rocker-left {
+            left: 20px;
+            color: #4ecdc4;
+        }
+
+        .rocker-right {
+            right: 20px;
+            color: #888;
+        }
+
+        .rocker-switch input:checked+.rocker-slider .rocker-left {
+            color: #666;
+        }
+
+        .rocker-switch input:checked+.rocker-slider .rocker-right {
+            color: #fff;
+        }
+
+        /* ========== 测试面板样式 ========== */
+        .test-panel {
+            min-width: 300px;
+            max-width: 360px;
+            flex-shrink: 0;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            padding: var(--spacing-md);
+            font-size: 0.9rem;
+        }
+
+        .test-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 9px 10px;
+            border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+            gap: 8px;
+        }
+
+        .test-item:last-child {
+            border-bottom: none;
+        }
+
+        .test-item-label {
+            color: var(--text-primary);
+            flex: 1;
+            font-size: 0.88rem;
+            font-weight: 600;
+        }
+
+        .test-item-result {
+            font-weight: 800;
+            min-width: 80px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        .test-item-result.ok {
+            color: var(--accent-green);
+            font-size: 0.95rem;
+        }
+
+        .test-item-result.wait {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .test-item-result.fail {
+            color: var(--accent-red);
+        }
+
+        .test-panel-empty {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        /* ========== 通信接口管理面板 ========== */
+        .comm-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-md);
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .comm-panel .comm-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .comm-grid {
+            display: flex;
+            gap: var(--spacing-md);
+            flex-wrap: wrap;
+        }
+
+        .comm-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .comm-row.ble-row {
+            border-left: 3px solid var(--accent-cyan);
+        }
+
+        .comm-row.serial-row {
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .comm-row.mqtt-row {
+            border-left: 3px solid var(--accent-orange);
+        }
+
+        .comm-row .comm-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+            min-width: 36px;
+        }
+
+        .comm-row.ble-row .comm-label {
+            color: var(--accent-cyan);
+        }
+
+        .comm-row.serial-row .comm-label {
+            color: var(--accent-blue);
+        }
+
+        .comm-row.mqtt-row .comm-label {
+            color: var(--accent-orange);
+        }
+
+        .comm-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            flex-shrink: 0;
+        }
+
+        .comm-dot.on {
+            background: var(--accent-green);
+            box-shadow: 0 0 6px var(--accent-green);
+        }
+
+        .comm-btn {
+            font-size: 0.7rem;
+            padding: 4px 10px;
+            white-space: nowrap;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            font-weight: 500;
+        }
+
+        .comm-btn-ble {
+            background: var(--accent-cyan);
+            color: #000;
+        }
+
+        .comm-btn-ble:hover:not(:disabled) {
+            box-shadow: 0 0 10px rgba(0, 217, 255, 0.4);
+        }
+
+        .comm-check-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: auto;
+        }
+
+        .comm-check-label {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .comm-check-label input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: var(--accent-green);
+            cursor: pointer;
+        }
+
+        .comm-check-label input[type="checkbox"]:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* ========== 传感器标定面板 ========== */
+        .sensor-cal-card {
+            border-left: 3px solid #a371f7;
+        }
+
+        .sensor-cal-card .card-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #c4a0ff;
+        }
+
+        .sensor-cal-grid {
+            display: flex;
+            gap: var(--spacing-md);
+        }
+
+        @media (max-width: 768px) {
+            .sensor-cal-grid {
+                flex-direction: column;
+            }
+        }
+
+        .sensor-cal-row {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .sensor-cal-row.body-row {
+            border-left: 3px solid var(--temp-body);
+        }
+
+        .sensor-cal-row.foot-row {
+            border-left: 3px solid var(--temp-foot);
+        }
+
+        .sensor-cal-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            min-width: 36px;
+            white-space: nowrap;
+        }
+
+        .sensor-cal-row.body-row .sensor-cal-label {
+            color: var(--temp-body);
+        }
+
+        .sensor-cal-row.foot-row .sensor-cal-label {
+            color: var(--temp-foot);
+        }
+
+        .sensor-cal-field {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+
+        input.sensor-cal-input {
+            width: 80px;
+            padding: 7px 6px;
+            font-size: 0.82rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            outline: none;
+            text-align: center;
+            font-family: "JetBrains Mono", monospace;
+        }
+
+        input.sensor-cal-input:focus {
+            border-color: #a371f7;
+            box-shadow: 0 0 0 2px rgba(163, 113, 247, 0.2);
+        }
+
+        input.sensor-cal-input::placeholder {
+            color: var(--text-muted);
+            font-size: 0.65rem;
+        }
+
+        input.sensor-cal-input-wide {
+            width: 150px;
+        }
+
+        .sensor-cal-unit {
+            font-size: 0.72rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        .sensor-cal-btn {
+            flex-shrink: 0;
+            font-size: 0.7rem;
+            padding: 6px 12px;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            color: #fff;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .sensor-cal-btn.body-btn {
+            background: linear-gradient(135deg, #ff6b6b, #e55a5a);
+        }
+
+        .sensor-cal-btn.body-btn:hover:not(:disabled) {
+            box-shadow: 0 0 12px rgba(255, 107, 107, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .sensor-cal-btn.foot-btn {
+            background: linear-gradient(135deg, #4ecdc4, #3db8b0);
+        }
+
+        .sensor-cal-btn.foot-btn:hover:not(:disabled) {
+            box-shadow: 0 0 12px rgba(78, 205, 196, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .sensor-cal-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sensor-cal-hint {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            text-align: center;
+        }
+
+        /* ── 当前标定值显示 ── */
+        .sensor-cal-current {
+            margin-top: 10px;
+            padding: 12px 16px;
+            background: rgba(163, 113, 247, 0.08);
+            border-radius: var(--radius-sm);
+            border: 2px dashed rgba(163, 113, 247, 0.35);
+        }
+
+        .sensor-cal-current-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .sensor-cal-current-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #a371f7;
+            white-space: nowrap;
+        }
+
+        .sensor-cal-current-item {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        .sensor-cal-current-item span {
+            font-weight: 800;
+            font-size: 1.6rem;
+            font-variant-numeric: tabular-nums;
+            color: var(--accent-cyan);
+        }
+
+        .sensor-cal-current-item.body-val span {
+            color: var(--temp-body);
+        }
+
+        .sensor-cal-current-item.foot-val span {
+            color: var(--temp-foot);
+        }
+
+        .sensor-cal-get-btn {
+            margin-left: auto;
+            flex-shrink: 0;
+            font-size: 0.7rem;
+            padding: 5px 12px;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            color: #fff;
+            background: linear-gradient(135deg, #a371f7, #7c3aed);
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .sensor-cal-get-btn:hover:not(:disabled) {
+            box-shadow: 0 0 12px rgba(163, 113, 247, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .sensor-cal-get-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* CLEAR button - next to each 标定 button */
+        .sensor-cal-clear-btn {
+            flex-shrink: 0;
+            font-size: 0.68rem;
+            padding: 6px 10px;
+            border: 1px solid var(--accent-red);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--accent-red);
+            background: transparent;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+            margin-left: 4px;
+        }
+
+        .sensor-cal-clear-btn:hover {
+            background: var(--accent-red);
+            color: #fff;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+            transform: translateY(-1px);
+        }
+
+        /* CLEAR ALL button - next to 获取标定值 */
+        .sensor-cal-clear-all-btn {
+            flex-shrink: 0;
+            font-size: 0.7rem;
+            padding: 5px 12px;
+            border: 1px solid var(--accent-red);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--accent-red);
+            background: transparent;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+            margin-left: 6px;
+        }
+
+        .sensor-cal-clear-all-btn:hover {
+            background: var(--accent-red);
+            color: #fff;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+            transform: translateY(-1px);
+        }
+
+        /* ========== 标定进行中状态 ========== */
+        .cal-progress-wrap {
+            display: none;
+            margin-bottom: var(--spacing-md);
+        }
+
+        .cal-progress-wrap.active {
+            display: block;
+        }
+
+        .cal-progress-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+
+        .cal-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #a371f7, #7c3aed, #a371f7);
+            background-size: 200% 100%;
+            border-radius: 3px;
+            animation: cal-progress-anim 6s linear forwards, cal-shimmer 1.5s linear infinite;
+        }
+
+        @keyframes cal-progress-anim {
+            from {
+                width: 0%;
+            }
+
+            to {
+                width: 100%;
+            }
+        }
+
+        @keyframes cal-shimmer {
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: 0% 0;
+            }
+        }
+
+        .cal-progress-text {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #a371f7;
+        }
+
+        .cal-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(163, 113, 247, 0.3);
+            border-top-color: #a371f7;
+            border-radius: 50%;
+            animation: cal-spin 0.8s linear infinite;
+        }
+
+        @keyframes cal-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .cal-progress-phase {
+            font-weight: 500;
+            color: #c4a0ff;
+            font-size: 0.72rem;
+        }
+
+        .cal-res-display {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 8px;
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        .cal-res-item {
+            padding: 4px 12px;
+            background: rgba(163, 113, 247, 0.12);
+            border-radius: 4px;
+            border: 1px solid rgba(163, 113, 247, 0.25);
+        }
+
+        .cal-res-item .cal-res-label {
+            color: #888;
+            font-size: 0.65rem;
+            font-weight: 500;
+            margin-right: 4px;
+        }
+
+        .cal-res-item .cal-res-value {
+            color: #fff;
+            font-weight: 800;
+        }
+
+        /* 标定进行中：禁用所有标定区按钮 */
+        .sensor-cal-card.cal-locked .sensor-cal-btn,
+        .sensor-cal-card.cal-locked .sensor-cal-clear-btn,
+        .sensor-cal-card.cal-locked .sensor-cal-get-btn,
+        .sensor-cal-card.cal-locked .sensor-cal-clear-all-btn {
+            opacity: 0.35;
+            cursor: not-allowed;
+            pointer-events: none;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .sensor-cal-card.cal-locked input.sensor-cal-input {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        /* 清除标定/硬件复位后2秒锁定 */
+        .post-action-locked .sensor-cal-btn,
+        .post-action-locked .sensor-cal-clear-btn,
+        .post-action-locked .sensor-cal-get-btn,
+        .post-action-locked .sensor-cal-clear-all-btn,
+        .post-action-locked #getSystemInfoBtn,
+        .post-action-locked #hardwareResetBtn {
+            opacity: 0.35;
+            cursor: not-allowed;
+            pointer-events: none;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .post-action-locked input.sensor-cal-input {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        /* ── 操作后锁定 toast 提示 ── */
+        #postActionToast {
+            position: fixed;
+            top: -80px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: #1a1a2e;
+            border: 2px solid #a371f7;
+            border-radius: 10px;
+            padding: 12px 24px;
+            min-width: 320px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(163, 113, 247, 0.3);
+            transition: top 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #postActionToast.show {
+            top: 16px;
+        }
+
+        #postActionToast .toast-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #c4a0ff;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        #postActionToast .toast-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(163, 113, 247, 0.3);
+            border-top-color: #a371f7;
+            border-radius: 50%;
+            animation: cal-spin 0.8s linear infinite;
+        }
+
+        #postActionToast .toast-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        #postActionToast .toast-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #a371f7, #7c3aed);
+            border-radius: 2px;
+            animation: toast-fill 2s linear forwards;
+        }
+
+        @keyframes toast-fill {
+            from {
+                width: 0%;
+            }
+
+            to {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 操作后锁定提示 -->
+    <div id="postActionToast">
+        <div class="toast-label">
+            <span class="toast-spinner"></span>
+            <span id="toastActionName">处理中...</span>
+        </div>
+        <div class="toast-bar">
+            <div class="toast-bar-fill" id="toastBarFill"></div>
+        </div>
+    </div>
+    <!-- 环境温度设置弹窗 -->
+    <div class="ambient-modal" id="ambientTempModal">
+        <div class="ambient-modal-box">
+            <div class="ambient-modal-title">🌡 设置环境温度</div>
+            <div class="ambient-modal-warnings">
+                ⚠️ 环境温度要<strong>稳定</strong>，测量要<strong>准确</strong>！<br>
+                ⚠️ 设置值取<strong>整数</strong>，输入的小数按<strong>四舍五入</strong>处理。<br>
+                ⚠️ 测试毯子时，毯子需在环境中适应<strong>1 小时以上</strong>，测量才够准确！
+            </div>
+            <div class="ambient-modal-input-row">
+                <input type="number" id="ambientTempInput" min="0" max="40" step="0.1" placeholder="0~40，支持1位小数"
+                    onkeydown="if(event.key==='Enter'){confirmAmbientTemp();}">
+                <span class="ambient-modal-unit">°C</span>
+            </div>
+            <div class="ambient-modal-btns">
+                <button class="ambient-modal-cancel" onclick="closeAmbientTempModal()">取消</button>
+                <button class="ambient-modal-confirm" onclick="confirmAmbientTemp()">确认设置</button>
+            </div>
+        </div>
+    </div>
+    <header class="header">
+        <h1>Stoov Heating 温度参数修正</h1>
+        <div class="page-version" id="pageVersion" title="app-modules.js 脚本版本号，用于确认缓存已更新">版本: 加载中...</div>
+    </header>
+
+    <!-- 通信接口管理面板 -->
+    <div class="comm-panel">
+        <div class="comm-title">⚡ 通信接口管理（勾选即启用对应通道的收发）</div>
+        <div class="comm-grid">
+            <!-- BLE 蓝牙 -->
+            <div class="comm-row ble-row">
+                <span class="comm-dot" id="bleCommDot"></span>
+                <span class="comm-label">BLE</span>
+                <button id="bleConnectBtn" class="comm-btn comm-btn-ble">连接蓝牙</button>
+                <div class="comm-check-group">
+                    <label class="comm-check-label"><input type="checkbox" id="bleRxCheck" disabled
+                            onchange="onCommCheckChange()"> 接收</label>
+                    <label class="comm-check-label"><input type="checkbox" id="bleTxCheck" disabled
+                            onchange="onCommCheckChange()"> 发送</label>
+                </div>
+            </div>
+            <!-- 串口 -->
+            <div class="comm-row serial-row">
+                <span class="comm-dot" id="serialCommDot"></span>
+                <span class="comm-label">串口</span>
+                <button id="serialToggleBtn" class="comm-btn" style="background:var(--accent-blue);color:#fff;"
+                    onclick="toggleSerial()">连接串口</button>
+                <div class="comm-check-group">
+                    <label class="comm-check-label"><input type="checkbox" id="serialRxCheck" disabled
+                            onchange="onCommCheckChange()"> 接收</label>
+                    <label class="comm-check-label"><input type="checkbox" id="serialTxCheck" disabled
+                            onchange="onCommCheckChange()"> 发送</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 顶部控制区域 -->
+        <div class="top-controls">
+            <!-- 加热控制 -->
+            <div class="control-box playback-box">
+                <div class="card-title">
+
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    加热控制器状态显示
+                </div>
+
+                <div class="setting-row" style="margin-bottom: 6px">
+                    <!-- 👇 新增：硬件运行时间显示 -->
+                    <div class="setting-item">
+                        <label>硬件运行时间:</label>
+                        <span id="hardwareUptimeDisplay" class="hardware-uptime">00:00:00</span>
+                    </div>
+                    <div class="device-info-group">
+                        <span class="device-info-item">器件ID: <span id="deviceIdText">未知</span></span>
+                        <span class="separator">|</span>
+                        <span class="device-info-item">器件版本: <span id="deviceVersionText">未知</span></span>
+                    </div>
+
+                    <!-- 1. 手动获取 (已更换为刷新图标) -->
+                    <button id="getSystemInfoBtn" class="btn btn-outline" onclick="manualGetSystemInfo()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6"></path>
+                            <path d="M1 20v-6h6"></path>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                        手动获取
+                    </button>
+                    <!-- 硬件复位 -->
+                    <button id="hardwareResetBtn" class="btn btn-outline" onclick="startHardwareResetRequest()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21.5 2v6h-6"></path>
+                            <path d="M2.5 22v-6h6"></path>
+                            <path d="M2.5 11.5a10 10 0 0 1 18.4-4.5L21.5 8M21.5 12.5a10 10 0 0 1-18.4 4.5L2.5 16">
+                            </path>
+                        </svg>
+                        硬件复位
+                    </button>
+
+                </div>
+            </div>
+
+            <!-- 周期 -->
+            <div class="control-box cycle-box">
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    周期
+                </div>
+                <div class="setting-row">
+                    <div class="setting-item">
+                        <label>间隔:</label>
+                        <input type="number" id="timerIntervalInput" value="3" min="0" max="300" style="width: 60px" />
+                        <span class="unit">秒</span>
+                    </div>
+                </div>
+                <button id="startTimerBtn" class="btn btn-secondary" style="margin-top: 6px">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    设置周期
+                </button>
+            </div>
+
+        </div>
+
+        <!-- 加热状态数据监测 -->
+        <div class="card" style="
+          background: linear-gradient(135deg,rgba(33, 38, 45, 0.95),rgba(22, 27, 34, 0.95));
+          border-color: rgba(88, 166, 255, 0.2);">
+            <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+                </svg>
+                加热器温度数据监测
+            </div>
+            <div class="temp-display">
+                <div class="temp-box body">
+                    <div class="temp-row">
+                        <span class="temp-label">身体实时温度: <span class="temp-value-inline" id="bodyTemp">--</span>°C<span
+                                class="env-diff" id="bodyEnvDiff"></span></span>
+                    </div>
+                </div>
+                <div class="temp-box ambient" ondblclick="openAmbientTempDialog()" title="👆 双击卡片设置环境温度"
+                    style="cursor:pointer;">
+                    <div class="temp-row">
+                        <span class="temp-label">环境温度: <span class="temp-value-inline"
+                                id="ambientTempDisplay">--</span>°C</span>
+                    </div>
+                </div>
+                <div class="temp-box foot">
+                    <div class="temp-row">
+                        <span class="temp-label">脚部实时温度: <span class="temp-value-inline" id="footTemp">--</span>°C<span
+                                class="env-diff" id="footEnvDiff"></span></span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 传感器标定 -->
+        <div class="card sensor-cal-card" id="sensorCalCard">
+            <div class="card-title">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 20V10"></path>
+                    <path d="M18 20V4"></path>
+                    <path d="M6 20v-4"></path>
+                </svg>
+                传感器标定 (Sensor Calibration)
+            </div>
+            <!-- 标定进行中进度指示器 -->
+            <div class="cal-progress-wrap" id="calProgressWrap">
+                <div class="cal-progress-bar">
+                    <div class="cal-progress-fill" id="calProgressFill"></div>
+                </div>
+                <div class="cal-progress-text">
+                    <span class="cal-spinner"></span>
+                    <span id="calProgressLabel">标定验证中...</span>
+                    <span class="cal-progress-phase" id="calProgressPhase"></span>
+                </div>
+            </div>
+            <div class="sensor-cal-grid">
+                <!-- 身体标定 (sensorId=1) -->
+                <div class="sensor-cal-row body-row">
+                    <span class="sensor-cal-label">身体</span>
+                    <span class="sensor-cal-field">
+                        <input type="number" id="bodyCalTemp" class="sensor-cal-input" placeholder="5~30" min="5"
+                            max="30" step="1">
+                        <span class="sensor-cal-unit">°C</span>
+                    </span>
+                    <span class="sensor-cal-field">
+                        <span style="font-size:0.72rem;color:var(--text-secondary);white-space:nowrap;">标定前：</span>
+                        <span id="bodyCalPreTemp"
+                            style="font-weight:700;color:var(--temp-body);font-family:'JetBrains Mono',monospace;font-size:0.85rem;">--</span>
+                        <span class="sensor-cal-unit">°C</span>
+                    </span>
+                    <span class="sensor-cal-field" id="bodyCalVerifyField" style="display:none;">
+                        <span style="font-size:0.68rem;color:var(--text-secondary);">验证 </span>
+                        <span
+                            style="font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:#fff;"
+                            id="bodyCalVerifyR1">--</span>
+                        <span style="color:#888;font-size:0.65rem;">/</span>
+                        <span
+                            style="font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:#fff;"
+                            id="bodyCalVerifyR2">--</span>
+                        <span class="sensor-cal-unit">Ω</span>
+                        <span
+                            style="font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.75rem;margin-left:4px;"
+                            id="bodyCalVerifyDiff"></span>
+                    </span>
+                    <button class="sensor-cal-btn body-btn" onclick="sendBodyCal()">标定身体</button>
+                    <button class="sensor-cal-clear-btn" onclick="clearSensorCal('b')" title="清除身体标定数据">清除标定</button>
+                </div>
+                <!-- 脚部标定 (sensorId=0) -->
+                <div class="sensor-cal-row foot-row">
+                    <span class="sensor-cal-label">脚部</span>
+                    <span class="sensor-cal-field">
+                        <input type="number" id="footCalTemp" class="sensor-cal-input" placeholder="5~30" min="5"
+                            max="30" step="1">
+                        <span class="sensor-cal-unit">°C</span>
+                    </span>
+                    <span class="sensor-cal-field">
+                        <span style="font-size:0.72rem;color:var(--text-secondary);white-space:nowrap;">标定前：</span>
+                        <span id="footCalPreTemp"
+                            style="font-weight:700;color:var(--temp-foot);font-family:'JetBrains Mono',monospace;font-size:0.85rem;">--</span>
+                        <span class="sensor-cal-unit">°C</span>
+                    </span>
+                    <span class="sensor-cal-field" id="footCalVerifyField" style="display:none;">
+                        <span style="font-size:0.68rem;color:var(--text-secondary);">验证 </span>
+                        <span
+                            style="font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:#fff;"
+                            id="footCalVerifyR1">--</span>
+                        <span style="color:#888;font-size:0.65rem;">/</span>
+                        <span
+                            style="font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:#fff;"
+                            id="footCalVerifyR2">--</span>
+                        <span class="sensor-cal-unit">Ω</span>
+                        <span
+                            style="font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.75rem;margin-left:4px;"
+                            id="footCalVerifyDiff"></span>
+                    </span>
+                    <button class="sensor-cal-btn foot-btn" onclick="sendFootCal()">标定脚部</button>
+                    <button class="sensor-cal-clear-btn" onclick="clearSensorCal('a')" title="清除脚部标定数据">清除标定</button>
+                </div>
+            </div>
+            <!-- 当前标定值显示 -->
+            <div class="sensor-cal-current">
+                <div class="sensor-cal-current-row">
+                    <span class="sensor-cal-current-label">当前标定值:</span>
+                    <span class="sensor-cal-current-item body-val">身体 <span id="bodyCalCurTemp">--</span> <span
+                            id="bodyCalCurRes">--</span></span>
+                    <span class="sensor-cal-current-item foot-val">脚部 <span id="footCalCurTemp">--</span> <span
+                            id="footCalCurRes">--</span></span>
+                    <button class="sensor-cal-get-btn" onclick="calGetSensorCal()">获取标定值</button>
+                    <button class="sensor-cal-clear-all-btn" onclick="clearSensorCal(0xFF)"
+                        title="清除全部标定数据">清除全部标定值</button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- 串口日志 -->
+        <div class="card">
+            <div class="log-box">
+                <div class="log-header">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="4 17 10 11 4 5"></polyline>
+                            <line x1="12" y1="19" x2="20" y2="19"></line>
+                        </svg>
+                        串口日志
+                    </div>
+                    <button class="btn btn-secondary clear-btn" onclick="clearBleLogs()">
+                        清除
+                    </button>
+                </div>
+                <div class="log-container" id="bleLogContainer">
+                    <div class="log-empty">等待串口连接...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 加载协议库（v=版本号用于强制刷新浏览器缓存，更新文件后请修改版本号） -->
+    <script src="./serial-protocol.min.js?v=20260813"></script>
+    <script src="./mqtt.min.js?v=20260813"></script>
+    <script id="appModulesScript" src="./app-modules.js?v=20260813k"></script>
+    <script>
+        // 读取 app-modules.js 的 ?v= 版本号并显示在页面标题下方
+        (function () {
+            var s = document.getElementById('appModulesScript');
+            var m = s && s.src ? s.src.match(/[?&]v=([^&]+)/) : null;
+            var v = document.getElementById('pageVersion');
+            if (v) {
+                v.textContent = m ? 'app-modules.js 版本: ' + m[1] : '版本号未找到';
+            }
+        })();
+    </script>
+
+    <!-- ====== 传感器标定发送函数 ====== -->
+    <script>
+        // ── 标定多阶段验证：3秒读→重发→3秒读→比较阻值差异≤1.0Ω，超差自动重试（最多3次） ──
+        let calPhase = 0;           // 0=空闲, 1=等待第1次读取, 2=等待第2次读取
+        let calPhaseTimer = null;
+        let calPhaseSensor = null;  // 'body' | 'foot'
+        let calTargetParams = null; // {sensorId, temp, res}
+        let calFirstResOhm = null;
+        let calAttemptCount = 0;    // 当前标定已执行次数（阻值超差时自动重试，最多3次）
+        let calLockActive = false;  // 6秒内禁止其它请求
+
+        // ── 清除标定/硬件复位后2秒锁定+自动获取 ──
+        let postActionTimer = null;
+        function schedulePostAction(actionName) {
+            // 重置已有定时器
+            if (postActionTimer) { clearTimeout(postActionTimer); postActionTimer = null; }
+            // 锁定所有操作按钮2秒
+            document.body.classList.add('post-action-locked');
+            // 操作期间暂停心跳断连检测，避免误判断连/主动探测
+            if (window.App && App.Controller && App.Controller.suspendHeartbeat) {
+                App.Controller.suspendHeartbeat(actionName || '操作');
+            }
+
+            // 显示 toast 动画
+            var toast = document.getElementById('postActionToast');
+            var toastFill = document.getElementById('toastBarFill');
+            var toastName = document.getElementById('toastActionName');
+            if (toast) toast.classList.add('show');
+            if (toastFill) {
+                toastFill.style.animation = 'none';
+                toastFill.offsetHeight;
+                toastFill.style.animation = 'toast-fill 2s linear forwards';
+            }
+            if (toastName) toastName.textContent = actionName + ' 已执行，2秒后自动刷新...';
+
+            bleAddLog('info', actionName + ' 已执行，2秒后自动获取设备信息...');
+            postActionTimer = setTimeout(function () {
+                document.body.classList.remove('post-action-locked');
+                if (toast) toast.classList.remove('show');
+                postActionTimer = null;
+                // 操作完成：恢复心跳断连检测，并获取一次设备信息
+                if (window.App && App.Controller && App.Controller.resumeHeartbeat) {
+                    App.Controller.resumeHeartbeat(true);
+                } else if (typeof startGetSystemInfoRequest === 'function') {
+                    startGetSystemInfoRequest();
+                }
+                if (typeof getSensorCal === 'function') getSensorCal();
+            }, 2000);
+        }
+
+        // ── 环境设置温度 ──
+        let envTempValue = null; // 用户设置的环境温度（整数）
+
+        /** 打开环境温度设置弹窗 */
+        function openAmbientTempDialog() {
+            var modal = document.getElementById('ambientTempModal');
+            var input = document.getElementById('ambientTempInput');
+            if (!modal) return;
+            if (input) {
+                input.value = envTempValue !== null ? envTempValue : '';
+                setTimeout(function () { input.focus(); }, 50);
+            }
+            modal.classList.add('show');
+        }
+
+        /** 关闭环境温度设置弹窗 */
+        function closeAmbientTempModal() {
+            var modal = document.getElementById('ambientTempModal');
+            if (modal) modal.classList.remove('show');
+        }
+
+        /** 确认设置环境温度：四舍五入取整，同步标定温度输入框，更新差异显示 */
+        function confirmAmbientTemp() {
+            var input = document.getElementById('ambientTempInput');
+            var raw = input ? parseFloat(input.value) : NaN;
+            if (isNaN(raw)) {
+                alert('请输入有效的环境温度数值！');
+                return;
+            }
+            if (raw < 0 || raw > 40) {
+                alert('环境温度超出允许范围(0~40°C)，请重新输入！');
+                return;
+            }
+            var rounded = Math.round(raw); // 小数四舍五入取整
+            envTempValue = rounded;
+            bleAddLog('info', `环境温度已设置: ${raw}°C → 四舍五入为 ${rounded}°C`);
+            // 更新卡片显示
+            var disp = document.getElementById('ambientTempDisplay');
+            if (disp) disp.textContent = rounded;
+            // 同步传感器标定区的身体/脚部标定温度输入框
+            var b = document.getElementById('bodyCalTemp');
+            var f = document.getElementById('footCalTemp');
+            if (b) b.value = rounded;
+            if (f) f.value = rounded;
+            // 立即计算一次差异
+            updateEnvDiffs();
+            closeAmbientTempModal();
+        }
+
+        /** 重新计算身体/脚部实时温度与环境温度的差异（每次温度更新时由 app-modules.js 调用） */
+        function updateEnvDiffs() {
+            updateEnvDiff('bodyTemp', 'bodyEnvDiff');
+            updateEnvDiff('footTemp', 'footEnvDiff');
+        }
+
+        function updateEnvDiff(tempId, diffId) {
+            var diffEl = document.getElementById(diffId);
+            if (!diffEl) return;
+            if (envTempValue === null) { diffEl.textContent = ''; return; }
+            var tempEl = document.getElementById(tempId);
+            var txt = tempEl ? tempEl.textContent.trim() : '';
+            if (txt === '--' || txt === '短路' || txt === '开路') { diffEl.textContent = ''; return; }
+            var t = parseFloat(txt);
+            if (isNaN(t)) { diffEl.textContent = ''; return; }
+            var d = t - envTempValue;
+            if (Math.abs(d) < 0.05) {
+                diffEl.textContent = '(与环温一致)';
+                diffEl.className = 'env-diff ok';
+            } else if (d > 0) {
+                diffEl.textContent = '(高' + d.toFixed(1) + '度)';
+                diffEl.className = 'env-diff high';
+            } else {
+                diffEl.textContent = '(低' + Math.abs(d).toFixed(1) + '度)';
+                diffEl.className = 'env-diff low';
+            }
+        }
+
+        // 包装 getSensorCal 按钮，增加连接检查
+        function calGetSensorCal() {
+            if (!App.Interfaces.Manager.hasAnyTx()) {
+                alert('未连接任何通讯端口！\n请先在通信管理面板中连接串口或蓝牙后再操作。');
+                return;
+            }
+            if (typeof getSensorCal === 'function') getSensorCal();
+        }
+
+        // 包装 clearSensorCal：必须收到设备应答(0x06)才算清除成功，成功后2秒锁定+自动获取
+        (function () {
+            var _origClearSensorCal = window.clearSensorCal;
+            window.clearSensorCal = function (target) {
+                if (!App.Interfaces.Manager.hasAnyTx()) {
+                    alert('未连接任何通讯端口！\n请先在通信管理面板中连接串口或蓝牙后再操作。');
+                    return;
+                }
+                if (_origClearSensorCal) _origClearSensorCal(target);
+                var label = target === 0xFF ? '清除全部标定值' : (target === 'b' || target === 0x62 ? '清除身体标定' : '清除脚部标定');
+                // 记录发送前的应答时间戳，等待设备回复应答
+                var ackMark = (window.App && App.Processor) ? App.Processor.lastCalAckAt : 0;
+                bleAddLog('info', `${label} 指令已发送，等待设备应答...`);
+                setTimeout(function () {
+                    var gotAck = (window.App && App.Processor && App.Processor.lastCalAckAt > ackMark);
+                    var ackCode = (window.App && App.Processor) ? App.Processor.lastCalAckCode : null;
+                    if (gotAck && ackCode === 0x06) {
+                        bleAddLog('info', `${label} 成功（收到设备应答 0x06）`);
+                        // 应答成功后清除对应显示
+                        if (target === 0xFF || target === 'b' || target === 0x62) {
+                            var bt = document.getElementById('bodyCalCurTemp'), br = document.getElementById('bodyCalCurRes');
+                            if (bt) bt.textContent = '--'; if (br) br.textContent = '--';
+                        }
+                        if (target === 0xFF || target === 'a' || target === 0x61) {
+                            var ft = document.getElementById('footCalCurTemp'), fr = document.getElementById('footCalCurRes');
+                            if (ft) ft.textContent = '--'; if (fr) fr.textContent = '--';
+                        }
+                        schedulePostAction(label);
+                    } else if (gotAck && ackCode !== 0x06) {
+                        bleAddLog('error', `${label} 失败：设备返回错误码 0x${(ackCode >>> 0).toString(16).toUpperCase()}`);
+                        alert(`${label} 失败！设备返回错误码 0x${(ackCode >>> 0).toString(16).toUpperCase()}。\n请检查设备后重试。`);
+                    } else {
+                        bleAddLog('error', `${label} 失败：未收到设备应答`);
+                        alert(`${label} 失败！未收到设备应答。\n请检查设备连接后重试。`);
+                    }
+                }, 800);
+            };
+        })();
+
+        // 手动获取设备信息：先检查通讯连接（自动获取路径不弹窗）
+        function manualGetSystemInfo() {
+            if (!App.Interfaces.Manager.hasAnyTx()) {
+                alert('未连接任何通讯端口！\n请先在通信管理面板中连接串口或蓝牙后再操作。');
+                return;
+            }
+            if (typeof startGetSystemInfoRequest === 'function') startGetSystemInfoRequest();
+        }
+
+        // 包装 startHardwareResetRequest，增加2秒锁定+自动获取
+        (function () {
+            var _origHwReset = window.startHardwareResetRequest;
+            window.startHardwareResetRequest = function () {
+                if (!App.Interfaces.Manager.hasAnyTx()) {
+                    alert('未连接任何通讯端口！\n请先在通信管理面板中连接串口或蓝牙后再操作。');
+                    return;
+                }
+                if (_origHwReset) _origHwReset();
+                schedulePostAction('硬件复位');
+            };
+        })();
+
+        /** 切换标定进行中状态：进度条 + 禁用所有标定按钮/输入框 */
+        function setCalInProgress(active, phaseText) {
+            calLockActive = active;
+            const card = document.getElementById('sensorCalCard');
+            const wrap = document.getElementById('calProgressWrap');
+            const fill = document.getElementById('calProgressFill');
+            const phaseEl = document.getElementById('calProgressPhase');
+            if (card) {
+                if (active) card.classList.add('cal-locked'); else card.classList.remove('cal-locked');
+            }
+            if (wrap) {
+                if (active) { wrap.classList.add('active'); } else { wrap.classList.remove('active'); }
+            }
+            if (fill) {
+                fill.style.animation = 'none';
+                fill.offsetHeight; // 强制回流以重置动画
+                if (active) fill.style.animation = 'cal-progress-anim 6s linear forwards, cal-shimmer 1.5s linear infinite';
+                else fill.style.animation = 'none';
+            }
+            if (phaseEl && phaseText !== undefined) {
+                phaseEl.textContent = phaseText;
+            }
+        }
+
+        /** 清除验证显示（不传参数时清除所有；传 'body'/'foot' 时只清除对应传感器，保留另一路已获取的验证数据） */
+        function calClearVerifyDisplay(sensorFilter) {
+            ['body', 'foot'].forEach(function (s) {
+                if (sensorFilter && s !== sensorFilter) return; // 保留其它传感器的验证数据
+                var f = document.getElementById(s + 'CalVerifyField');
+                if (f) f.style.display = 'none';
+                var r1 = document.getElementById(s + 'CalVerifyR1');
+                var r2 = document.getElementById(s + 'CalVerifyR2');
+                var d = document.getElementById(s + 'CalVerifyDiff');
+                if (r1) r1.textContent = '--';
+                if (r2) r2.textContent = '--';
+                if (d) d.textContent = '';
+            });
+        }
+
+        /** 更新标定电阻验证显示（显示在对应传感器行内） */
+        function updateCalResDisplay(sensorLabel, r1, r2, diff) {
+            var s = sensorLabel || calPhaseSensor || '';
+            if (!s) return;
+            var field = document.getElementById(s + 'CalVerifyField');
+            var r1El = document.getElementById(s + 'CalVerifyR1');
+            var r2El = document.getElementById(s + 'CalVerifyR2');
+            var diffEl = document.getElementById(s + 'CalVerifyDiff');
+            if (field) field.style.display = '';
+            if (r1El && r1 !== undefined) r1El.textContent = (typeof r1 === 'number' && !isNaN(r1)) ? r1.toFixed(1) : '--';
+            if (r2El && r2 !== undefined) r2El.textContent = (typeof r2 === 'number' && !isNaN(r2)) ? r2.toFixed(1) : '--';
+            if (diffEl && diff !== undefined && !isNaN(diff)) {
+                diffEl.textContent = 'Δ' + diff.toFixed(1) + 'Ω';
+                diffEl.style.color = diff > 1.0 ? 'var(--accent-red)' : 'var(--accent-green)';
+            }
+        }
+
+        /** 读取指定传感器的当前标定电阻值（从DOM解析） */
+        function calReadResistance(sensorLabel) {
+            const resEl = document.getElementById(sensorLabel === 'body' ? 'bodyCalCurRes' : 'footCalCurRes');
+            if (!resEl) return NaN;
+            const txt = resEl.textContent.trim();
+            const match = txt.match(/[\d.]+/);
+            return match ? parseFloat(match[0]) : NaN;
+        }
+
+        // ── MQTT 标定结果数据收集与上报 ──
+        // 身体/脚部各自累积标定数据，有数据就上报
+        let mqttCalData = { body: { first: null, second: null }, foot: { first: null, second: null } };
+        // 记录当前标定数据所属的器件ID：器件更换时清空积累数据，避免不同器件数据混在一起
+        let mqttCalDataDid = '';
+
+        /** 读取当前标定返回温度（从DOM解析，如 "25°C" → 25） */
+        function calReadCalTemp(sensorLabel) {
+            const el = document.getElementById(sensorLabel === 'body' ? 'bodyCalCurTemp' : 'footCalCurTemp');
+            if (!el) return NaN;
+            const t = parseFloat(el.textContent);
+            return isNaN(t) ? NaN : t;
+        }
+
+        /** 组装 JSON 并通过 MQTT 上报标定结果（Topic: /unito/stoov/heating-bed/cal-result）
+         *  字段名精简压缩数据量：date/time=日期时间, type=CAL, did=器件ID, dv=器件版本,
+         *  upt=硬件运行时间, et=环境温度, b/f=身体/脚部, pt=标定前温度, ct=标定温度,
+         *  f1/f2=第1/2次读取, tp=返回温度, rs=返回阻值,
+         *  r=标定结果, df=阻值差, rsn=失败原因 —— 均放在对应 b(身体)/f(脚部) 段内 */
+        function mqttPublishCalResult(extra) {
+            if (typeof App === 'undefined' || !App.Interfaces || !App.Interfaces.MQTT) return;
+            const g = (id) => { const e = document.getElementById(id); return e ? e.textContent.trim() : ''; };
+            const numOrNull = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+            const readObj = (d) => {
+                const out = {};
+                if (d && d.temp !== null && d.temp !== undefined) out.tp = d.temp;
+                if (d && d.res !== null && d.res !== undefined) out.rs = d.res;
+                return out;
+            };
+            // 将本次标定结果(r/df/rsn)写入当前传感器(b/f)的积累数据，随该段一起上报
+            if (extra && (calPhaseSensor === 'body' || calPhaseSensor === 'foot')) {
+                const d = mqttCalData[calPhaseSensor] || (mqttCalData[calPhaseSensor] = {});
+                if (extra.result) d.result = extra.result;
+                if (extra.diffOhm !== undefined) d.diffOhm = extra.diffOhm;
+                if (extra.reason) d.reason = extra.reason;
+            }
+            const sensorObj = (key) => {
+                const d = mqttCalData[key] || {};
+                const out = {};
+                const pt = (d.preTemp !== undefined && d.preTemp !== null) ? numOrNull(d.preTemp) : null;
+                const ct = d.calTemp !== undefined ? numOrNull(d.calTemp) : null;
+                if (pt !== null) out.pt = pt;
+                if (ct !== null) out.ct = ct;
+                const f1 = readObj(d.first);
+                const f2 = readObj(d.second);
+                if (Object.keys(f1).length) out.f1 = f1;
+                if (Object.keys(f2).length) out.f2 = f2;
+                if (d.result) out.r = d.result;
+                if (d.diffOhm !== undefined && d.diffOhm !== null) out.df = d.diffOhm;
+                if (d.reason) out.rsn = d.reason;
+                return out;
+            };
+            const now = new Date();
+            const p2 = (n) => String(n).padStart(2, '0');
+            const payload = {
+                date: now.getFullYear() + '-' + p2(now.getMonth() + 1) + '-' + p2(now.getDate()),
+                time: p2(now.getHours()) + ':' + p2(now.getMinutes()) + ':' + p2(now.getSeconds()),
+                type: 'CAL',
+                did: g('deviceIdText'),
+                dv: g('deviceVersionText'),
+                upt: g('hardwareUptimeDisplay'),
+                b: sensorObj('body'),
+                f: sensorObj('foot'),
+            };
+            // 环境温度（已设置时上报）
+            if (envTempValue !== null && envTempValue !== undefined) payload.et = envTempValue;
+            App.Interfaces.MQTT.publishCalResult(payload);
+        }
+
+        /** 启动标定多阶段验证流程
+         *  isRetry=true 表示阻值超差后的自动重试（第2/3次） */
+        function startCalPhase(sensorLabel, sensorId, temp, res, preTemp, isRetry) {
+            // 标定验证期间暂停心跳断连检测，避免误判断连/主动探测
+            if (window.App && App.Controller && App.Controller.suspendHeartbeat) {
+                App.Controller.suspendHeartbeat('标定验证');
+            }
+            // 只清除当前传感器的验证显示，保留另一路传感器已获取的验证数据
+            calClearVerifyDisplay(sensorLabel);
+            // 首次标定时重置重试计数；自动重试时累加
+            if (isRetry) {
+                calAttemptCount++;
+            } else {
+                calAttemptCount = 1;
+            }
+            // 重置之前的状态
+            if (calPhaseTimer) { clearTimeout(calPhaseTimer); calPhaseTimer = null; }
+            calPhase = 1;
+            calPhaseSensor = sensorLabel;
+            calTargetParams = { sensorId: sensorId, temp: temp, res: res, preTemp: preTemp };
+            calFirstResOhm = null;
+
+            // 器件ID变化时，清空之前积累的标定数据，避免不同器件的数据混合上报
+            var curDidEl = document.getElementById('deviceIdText');
+            var curDid = curDidEl ? curDidEl.textContent.trim() : '';
+            if (mqttCalDataDid !== curDid) {
+                mqttCalDataDid = curDid;
+                mqttCalData = { body: { first: null, second: null }, foot: { first: null, second: null } };
+                bleAddLog('info', `器件变更(${curDid})，已清空之前的标定积累数据`);
+            }
+
+            // 记录本次标定输入（标定前温度/标定温度），供 MQTT 结果上报
+            mqttCalData[sensorLabel] = { preTemp: preTemp, calTemp: temp, first: null, second: null };
+
+            const cnName = sensorLabel === 'body' ? '身体' : '脚部';
+            bleAddLog('info', `标定验证启动(第${calAttemptCount}次) → ${cnName} sensorId=${sensorId} temp=${temp}°C res=${res}Ω | 3秒后第1次读取...`);
+
+            // 进入标定锁定状态：显示进度条 + 禁用所有按钮
+            setCalInProgress(true, '阶段1/2: 等待第1次读取...');
+
+            calPhaseTimer = setTimeout(function () {
+                setCalInProgress(true, '阶段1/2: 正在读取标定值...');
+                bleAddLog('info', `标定阶段1: 3秒到，读取标定值...`);
+                // 记录发送 GET 前的标定响应时间戳，用于判断是否收到新数据
+                var calReadMark1 = (window.App && App.Processor) ? App.Processor.lastCalReadAt : 0;
+                if (typeof getSensorCal === 'function') getSensorCal();
+                // 等待 600ms 让设备响应返回并更新DOM
+                setTimeout(function () {
+                    // 必须收到新的标定回复数据才能继续，不允许使用旧数据
+                    if (!(window.App && App.Processor && App.Processor.lastCalReadAt > calReadMark1)) {
+                        bleAddLog('error', '标定验证失败: 第1次读取未收到新的标定回复数据');
+                        alert(`标定失败！第1次读取未收到设备回复的新标定数据，标定中止。\n请检查设备连接后重试。`);
+                        if (typeof clearSensorCal === 'function') {
+                            clearSensorCal(calPhaseSensor === 'body' ? 'b' : 'a');
+                        }
+                        mqttPublishCalResult({ result: 'FAIL', reason: '第1次未收到新的标定回复数据' });
+                        setCalInProgress(false);
+                        calPhase = 0;
+                        calPhaseTimer = null;
+                        calPhaseSensor = null;
+                        calTargetParams = null;
+                        calFirstResOhm = null;
+                        if (window.App && App.Controller && App.Controller.resumeHeartbeat) App.Controller.resumeHeartbeat(false);
+                        return;
+                    }
+                    calFirstResOhm = calReadResistance(calPhaseSensor);
+                    if (isNaN(calFirstResOhm)) {
+                        bleAddLog('error', `标定验证失败: 无法读取第1次${cnName}阻值`);
+                        alert(`标定失败！无法读取第1次${cnName}传感器阻值，标定中止。\n请检查设备连接后重试。`);
+                        if (typeof clearSensorCal === 'function') {
+                            clearSensorCal(calPhaseSensor === 'body' ? 'b' : 'a');
+                        }
+                        mqttPublishCalResult({ result: 'FAIL', reason: '第1次读取阻值失败' });
+                        setCalInProgress(false);
+                        calPhase = 0;
+                        calPhaseTimer = null;
+                        calPhaseSensor = null;
+                        calTargetParams = null;
+                        calFirstResOhm = null;
+                        // 结束标定流程的心跳暂停（清除标定的2秒锁定及获取由 schedulePostAction 负责）
+                        if (window.App && App.Controller && App.Controller.resumeHeartbeat) App.Controller.resumeHeartbeat(false);
+                        return;
+                    }
+                    // 记录第1次标定返回的温度和阻值
+                    var firstCalTemp = calReadCalTemp(calPhaseSensor);
+                    mqttCalData[calPhaseSensor].first = {
+                        temp: isNaN(firstCalTemp) ? null : firstCalTemp,
+                        res: calFirstResOhm
+                    };
+                    updateCalResDisplay(null, calFirstResOhm, undefined, undefined);
+                    bleAddLog('info', `标定阶段1: 第1次读取阻值 = ${calFirstResOhm}Ω，重新发送标定...`);
+
+                    // 重新发送相同的标定（直接调 sendSensorCal，不更新标定前温度）
+                    // 记录发送前的 ACK/读取时间戳，用于判断重发后是否收到设备回复
+                    var calAckMark = (window.App && App.Processor) ? App.Processor.lastCalAckAt : 0;
+                    var calReadMark2 = (window.App && App.Processor) ? App.Processor.lastCalReadAt : 0;
+                    if (typeof sendSensorCal === 'function') {
+                        sendSensorCal(calTargetParams.sensorId, calTargetParams.temp, calTargetParams.res);
+                    }
+                    // 显式恢复第一次的标定前温度，防止被任何路径覆盖
+                    var preTempElId = calPhaseSensor === 'body' ? 'bodyCalPreTemp' : 'footCalPreTemp';
+                    var preTempEl = document.getElementById(preTempElId);
+                    if (preTempEl && calTargetParams.preTemp !== undefined) {
+                        preTempEl.textContent = calTargetParams.preTemp;
+                    }
+
+                    calPhase = 2;
+                    setCalInProgress(true, '阶段2/2: 等待第2次读取...');
+                    calPhaseTimer = setTimeout(function () {
+                        setCalInProgress(true, '阶段2/2: 正在读取标定值...');
+                        bleAddLog('info', `标定阶段2: 6秒到，第2次读取标定值...`);
+                        // 重发标定后必须收到设备回复（ACK 或 12字节标定响应）
+                        var gotSetReply = (window.App && App.Processor) &&
+                            (App.Processor.lastCalAckAt > calAckMark || App.Processor.lastCalReadAt > calReadMark2);
+                        if (!gotSetReply) {
+                            bleAddLog('error', '标定验证失败: 重新发送标定后未收到设备回复');
+                            alert(`标定失败！重新发送标定后未收到设备任何回复，标定中止。\n请检查设备连接后重试。`);
+                            if (typeof clearSensorCal === 'function') {
+                                clearSensorCal(calPhaseSensor === 'body' ? 'b' : 'a');
+                            }
+                            mqttPublishCalResult({ result: 'FAIL', reason: '重新发送标定后未收到设备回复' });
+                            setCalInProgress(false);
+                            calPhase = 0;
+                            calPhaseTimer = null;
+                            calPhaseSensor = null;
+                            calTargetParams = null;
+                            calFirstResOhm = null;
+                            if (window.App && App.Controller && App.Controller.resumeHeartbeat) App.Controller.resumeHeartbeat(false);
+                            return;
+                        }
+                        // 记录发送第2次 GET 前的时间戳，要求收到新数据
+                        var calReadMark3 = (window.App && App.Processor) ? App.Processor.lastCalReadAt : 0;
+                        if (typeof getSensorCal === 'function') getSensorCal();
+                        setTimeout(function () {
+                            // 第2次读取同样必须收到新的标定回复数据
+                            if (!(window.App && App.Processor && App.Processor.lastCalReadAt > calReadMark3)) {
+                                bleAddLog('error', '标定验证失败: 第2次读取未收到新的标定回复数据');
+                                alert(`标定失败！第2次读取未收到设备回复的新标定数据，标定中止。\n请检查设备连接后重试。`);
+                                if (typeof clearSensorCal === 'function') {
+                                    clearSensorCal(calPhaseSensor === 'body' ? 'b' : 'a');
+                                }
+                                mqttPublishCalResult({ result: 'FAIL', reason: '第2次未收到新的标定回复数据' });
+                                setCalInProgress(false);
+                                calPhase = 0;
+                                calPhaseTimer = null;
+                                calPhaseSensor = null;
+                                calTargetParams = null;
+                                calFirstResOhm = null;
+                                if (window.App && App.Controller && App.Controller.resumeHeartbeat) App.Controller.resumeHeartbeat(false);
+                                return;
+                            }
+                            const secondResOhm = calReadResistance(calPhaseSensor);
+                            if (isNaN(secondResOhm)) {
+                                bleAddLog('error', '标定验证失败: 无法读取第2次阻值');
+                                alert(`标定失败！无法读取第2次${cnName}传感器阻值，标定中止。\n请检查设备连接后重试。`);
+                                if (typeof clearSensorCal === 'function') {
+                                    clearSensorCal(calPhaseSensor === 'body' ? 'b' : 'a');
+                                }
+                                mqttPublishCalResult({ result: 'FAIL', reason: '第2次读取阻值失败' });
+                                setCalInProgress(false);
+                                calPhase = 0;
+                                calPhaseTimer = null;
+                                calPhaseSensor = null;
+                                calTargetParams = null;
+                                calFirstResOhm = null;
+                                // 结束标定流程的心跳暂停（清除标定的2秒锁定及获取由 schedulePostAction 负责）
+                                if (window.App && App.Controller && App.Controller.resumeHeartbeat) App.Controller.resumeHeartbeat(false);
+                                return;
+                            }
+                            // 记录第2次标定返回的温度和阻值
+                            var secondCalTemp = calReadCalTemp(calPhaseSensor);
+                            mqttCalData[calPhaseSensor].second = {
+                                temp: isNaN(secondCalTemp) ? null : secondCalTemp,
+                                res: secondResOhm
+                            };
+                            const diff = Math.abs(calFirstResOhm - secondResOhm);
+                            updateCalResDisplay(null, calFirstResOhm, secondResOhm, diff);
+                            bleAddLog('info', `标定验证结果: 第1次=${calFirstResOhm}Ω 第2次=${secondResOhm}Ω 差值=${diff.toFixed(1)}Ω`);
+
+                            if (diff > 1.0) {
+                                // 阻值超差：自动重试，最多执行3次标定；3次仍超差才报错误
+                                if (calAttemptCount < 3) {
+                                    bleAddLog('error', `标定第${calAttemptCount}次验证失败: 两次阻值差异 ${diff.toFixed(1)}Ω > 1.0Ω，自动重试第${calAttemptCount + 1}/3次...`);
+                                    // 重新发送一次标定指令后，重新执行完整验证流程
+                                    if (typeof sendSensorCal === 'function' && calTargetParams) {
+                                        sendSensorCal(calTargetParams.sensorId, calTargetParams.temp, calTargetParams.res);
+                                    }
+                                    startCalPhase(sensorLabel, calTargetParams.sensorId, calTargetParams.temp, calTargetParams.res, calTargetParams.preTemp, true);
+                                    return;
+                                }
+                                bleAddLog('error', `标定失败(已执行${calAttemptCount}次): 两次阻值差异 ${diff.toFixed(1)}Ω > 1.0Ω`);
+                                alert(`标定失败！${cnName}传感器连续${calAttemptCount}次验证阻值差异均超过 1.0Ω（最近一次 ${diff.toFixed(1)}Ω）。\n将清除${cnName}标定数据。`);
+                                // 清除对应传感器标定
+                                if (typeof clearSensorCal === 'function') {
+                                    clearSensorCal(sensorLabel === 'body' ? 'b' : 'a');
+                                }
+                                // 标定数据已被清除，同步清除本路验证显示
+                                calClearVerifyDisplay(sensorLabel);
+                                // MQTT 上报标定结果（失败）
+                                mqttPublishCalResult({ result: 'FAIL', diffOhm: Number(diff.toFixed(1)), reason: `连续${calAttemptCount}次两次阻值差异超过1.0Ω` });
+                            } else {
+                                bleAddLog('info', `标定验证通过: 两次阻值差异 ${diff.toFixed(1)}Ω ≤ 1.0Ω ✓`);
+                                // MQTT 上报标定结果（成功）
+                                mqttPublishCalResult({ result: 'OK', diffOhm: Number(diff.toFixed(1)) });
+                            }
+
+                            // 标定完成：恢复心跳断连检测，并获取一次设备信息
+                            if (window.App && App.Controller && App.Controller.resumeHeartbeat) {
+                                App.Controller.resumeHeartbeat(true);
+                            } else if (typeof startGetSystemInfoRequest === 'function') {
+                                startGetSystemInfoRequest();
+                            }
+
+                            // 退出锁定状态
+                            setCalInProgress(false);
+                            calPhase = 0;
+                            calPhaseTimer = null;
+                            calPhaseSensor = null;
+                            calTargetParams = null;
+                            calFirstResOhm = null;
+                        }, 600);
+                    }, 3000);
+                }, 600);
+            }, 3000);
+        }
+
+        /** 发送身体传感器标定指令 (sensorId=1) */
+        function sendBodyCal() {
+            if (!App.Interfaces.Manager.hasAnyTx()) {
+                alert('未连接任何通讯端口！\n请先在通信管理面板中连接串口或蓝牙后再操作。');
+                return;
+            }
+            const tempEl = document.getElementById('bodyCalTemp');
+            const temp = parseFloat(tempEl.value);
+            const res = 0;
+            if (isNaN(temp) || temp < 5 || temp > 30) {
+                bleAddLog('error', '身体标定失败: 温度必须在 5~30°C 之间');
+                alert('身体标定温度必须在 5~30°C 之间');
+                return;
+            }
+            // 比较标定温度与环境设置温度
+            if (envTempValue !== null && Math.round(temp) !== envTempValue) {
+                if (!confirm(`身体标定温度(${temp}°C)与设置的环境温度(${envTempValue}°C)不同！\n\n是否仍使用 ${temp}°C 进行标定？`)) {
+                    bleAddLog('info', '身体标定已取消：标定温度与环境设置温度不一致');
+                    return;
+                }
+                bleAddLog('info', `用户确认使用与环境温度不同的温度(${temp}°C)进行身体标定`);
+            }
+            // 校验实时温度状态
+            const realTempEl = document.getElementById('bodyTemp');
+            const realText = realTempEl ? realTempEl.textContent.trim() : '';
+            if (realText === '短路') {
+                bleAddLog('error', '身体标定失败: 身体传感器短路，无法标定');
+                alert('身体传感器当前状态为【短路】，无法进行标定！\n请检查传感器连接后再试。');
+                return;
+            }
+            if (realText === '开路') {
+                bleAddLog('error', '身体标定失败: 身体传感器开路，无法标定');
+                alert('身体传感器当前状态为【开路】，无法进行标定！\n请检查传感器连接后再试。');
+                return;
+            }
+            const realTemp = parseFloat(realText);
+            if (isNaN(realTemp)) {
+                bleAddLog('error', '身体标定失败: 身体传感器无有效温度数据，无法标定');
+                alert('身体传感器当前无有效温度数据，无法进行标定！\n请等待温度数据上报后再试。');
+                return;
+            }
+            if (Math.abs(realTemp - temp) > 10) {
+                bleAddLog('error', `身体标定失败: 实时温度${realTemp.toFixed(1)}°C 与标定温度${temp}°C 偏差>10°C`);
+                alert(`身体传感器实时温度(${realTemp.toFixed(1)}°C)与标定温度(${temp}°C)偏差超过 10°C，无法标定！\n请核实环境温度或检查传感器。`);
+                return;
+            }
+            if (typeof sendSensorCal === 'function') {
+                sendSensorCal(1, Math.round(temp), res);
+                // 记录标定前的实时温度
+                document.getElementById('bodyCalPreTemp').textContent = realTemp.toFixed(1);
+                startCalPhase('body', 1, Math.round(temp), res, realTemp.toFixed(1));
+            } else {
+                bleAddLog('error', 'sendSensorCal 函数未就绪，请等待模块加载');
+            }
+        }
+
+        /** 发送脚部传感器标定指令 (sensorId=0) */
+        function sendFootCal() {
+            if (!App.Interfaces.Manager.hasAnyTx()) {
+                alert('未连接任何通讯端口！\n请先在通信管理面板中连接串口或蓝牙后再操作。');
+                return;
+            }
+            const tempEl = document.getElementById('footCalTemp');
+            const temp = parseFloat(tempEl.value);
+            const res = 0;
+            if (isNaN(temp) || temp < 5 || temp > 30) {
+                bleAddLog('error', '脚部标定失败: 温度必须在 5~30°C 之间');
+                alert('脚部标定温度必须在 5~30°C 之间');
+                return;
+            }
+            // 比较标定温度与环境设置温度
+            if (envTempValue !== null && Math.round(temp) !== envTempValue) {
+                if (!confirm(`脚部标定温度(${temp}°C)与设置的环境温度(${envTempValue}°C)不同！\n\n是否仍使用 ${temp}°C 进行标定？`)) {
+                    bleAddLog('info', '脚部标定已取消：标定温度与环境设置温度不一致');
+                    return;
+                }
+                bleAddLog('info', `用户确认使用与环境温度不同的温度(${temp}°C)进行脚部标定`);
+            }
+            // 校验实时温度状态
+            const realTempEl = document.getElementById('footTemp');
+            const realText = realTempEl ? realTempEl.textContent.trim() : '';
+            if (realText === '短路') {
+                bleAddLog('error', '脚部标定失败: 脚部传感器短路，无法标定');
+                alert('脚部传感器当前状态为【短路】，无法进行标定！\n请检查传感器连接后再试。');
+                return;
+            }
+            if (realText === '开路') {
+                bleAddLog('error', '脚部标定失败: 脚部传感器开路，无法标定');
+                alert('脚部传感器当前状态为【开路】，无法进行标定！\n请检查传感器连接后再试。');
+                return;
+            }
+            const realTemp = parseFloat(realText);
+            if (isNaN(realTemp)) {
+                bleAddLog('error', '脚部标定失败: 脚部传感器无有效温度数据，无法标定');
+                alert('脚部传感器当前无有效温度数据，无法进行标定！\n请等待温度数据上报后再试。');
+                return;
+            }
+            if (Math.abs(realTemp - temp) > 10) {
+                bleAddLog('error', `脚部标定失败: 实时温度${realTemp.toFixed(1)}°C 与标定温度${temp}°C 偏差>10°C`);
+                alert(`脚部传感器实时温度(${realTemp.toFixed(1)}°C)与标定温度(${temp}°C)偏差超过 10°C，无法标定！\n请核实环境温度或检查传感器。`);
+                return;
+            }
+            if (typeof sendSensorCal === 'function') {
+                sendSensorCal(0, Math.round(temp), res);
+                // 记录标定前的实时温度
+                document.getElementById('footCalPreTemp').textContent = realTemp.toFixed(1);
+                startCalPhase('foot', 0, Math.round(temp), res, realTemp.toFixed(1));
+            } else {
+                bleAddLog('error', 'sendSensorCal 函数未就绪，请等待模块加载');
+            }
+        }
+
+        // 回车键发送支持
+        document.addEventListener('DOMContentLoaded', function () {
+            ['bodyCalTemp'].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') { e.preventDefault(); sendBodyCal(); }
+                });
+            });
+            ['footCalTemp'].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') { e.preventDefault(); sendFootCal(); }
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>

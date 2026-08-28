@@ -1,7 +1,7 @@
 {
   "name": "物联网学习和展示",
   "short_name": "IoT Lab",
-  "description": "记录网络编程实践 · 展示物联网设备实时数据 · 分享开发工具使用经验",
+  "description": "探索智能硬件、Stoov 加热产品与 Web IoT 开发工具，与同好一起研究、体验和创造。",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
@@ -23,18 +23,13 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/pwa-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icons/pwa-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
     }
   ],
   "shortcuts": [
-    {
-      "name": "ESP 设备面板",
-      "url": "https://esp.unito.top/",
-      "icons": [{ "src": "/icons/pwa-192x192.png", "sizes": "192x192" }]
-    },
     {
       "name": "固件烧录工具",
       "url": "/esp-web-tools.html",

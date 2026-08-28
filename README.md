@@ -91,8 +91,27 @@ GET /api/iot-data
 ## 路由行为
 
 - `/api/*`：由 Hono API 路由处理。
+- `/stoov-test/*`：托管 `stoov-test/dist`，部署前通过 `bun run build` 构建。
+- `/stoov-corr/*`：托管 `stoov-corr` 中的原生静态页面和资源。
 - 其他静态资源：从 `public` 目录提供。
 - 未匹配的页面路径：回退到 `public/index.html`，支持单页应用访问。
+
+## 构建和部署
+
+在项目根目录执行：
+
+```bash
+bun install
+bun run build
+bun run start
+```
+
+`bun run build` 会进入 `stoov-test` 执行 Vite 构建和 HTML 压缩；服务器启动后，两个工具分别通过以下地址访问：
+
+- `http://localhost:30000/stoov-test/`
+- `http://localhost:30000/stoov-corr/`
+
+部署服务器时需要同时上传主项目、`stoov-test` 和 `stoov-corr` 目录，并在启动服务前执行一次构建。
 
 ## 开发说明
 

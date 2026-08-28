@@ -4,7 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run --hot src/index.ts",
+    "dev": "bun run --watch src/index.ts",
+    "build:stoov-test": "bun --cwd stoov-test run build",
+    "build": "bun run build:stoov-test",
     "start": "bun run --smol src/index.ts"
   },
   "devDependencies": {
