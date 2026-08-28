@@ -1,9 +1,9 @@
-# dependencies (bun install)
-node_modules
+# dependencies (bun/npm install)
+**/node_modules/
 
-# output
-out
-dist
+# temporary build output
+# dist/ is intentionally tracked because deployment uses built assets.
+out/
 *.tgz
 
 # code coverage
@@ -11,9 +11,9 @@ coverage
 *.lcov
 
 # logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+logs/
+*.log
+report.*.json
 
 # dotenv environment variable files
 .env

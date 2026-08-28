@@ -1,7 +1,5 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
-import { readFile } from "node:fs/promises";
-import { join, extname } from "node:path";
 import api from "./routes/api";
 import stoov from "./routes/stoov";
 
@@ -41,12 +39,15 @@ app.use("/*", serveStatic({ root: "./public" }));
 // SPA 兜底：未匹配的路径返回 index.html
 app.get("*", serveStatic({ path: "./public/index.html" }));
 
-const port = Number(process.env.PORT) || 30000;
+// 固定服务端口，与 Nginx 的反向代理配置保持一致。
+const port = 30000;
+// 仅允许本机 Nginx 通过回环地址访问，不直接暴露 Bun 服务。
+const hostname = "127.0.0.1";
 
-console.log(`🚀 Server running at http://localhost:${port}`);
+console.log(`🚀 Server running at http://${hostname}:${port}`);
 
 export default {
   port,
-  hostname: "127.0.0.1", // 👈 最关键的一行，必须加在这里
+  hostname,
   fetch: app.fetch,
 };

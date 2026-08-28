@@ -1595,6 +1595,26 @@
                 justify-content: center;
             }
         }
+
+        .footer-filing {
+            margin-top: 8px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.62rem;
+            line-height: 1.5;
+            opacity: 0.72;
+        }
+
+        .footer-filing a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .footer-filing a:hover,
+        .footer-filing a:focus-visible {
+            color: var(--accent-cyan, currentColor);
+            text-decoration: underline;
+        }
     </style>
 </head>
 
@@ -1849,6 +1869,10 @@
         </div>
         <div style="text-align:right;margin-top:4px;">
             <span style="font-size:0.6rem;color:var(--text-muted);">Ver 1.2.0</span>
+        </div>
+        <div class="footer-filing" aria-label="网站备案信息">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">粤ICP备2025393310号-2</a>
+            <span> · 粤公网安备 44030002011217号</span>
         </div>
     </footer>
 

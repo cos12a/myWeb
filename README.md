@@ -40,11 +40,10 @@ bun run dev
 bun run start
 ```
 
-服务默认运行在 `http://localhost:3000`。如需修改端口，可以设置 `PORT` 环境变量：
+服务默认监听 `0.0.0.0:30000`。本机可以通过 `http://127.0.0.1:30000` 访问；如需修改监听地址或端口，可以设置 `HOST` 和 `PORT` 环境变量：
 
 ```bash
-$env:PORT=8080
-bun run dev
+HOST=127.0.0.1 PORT=8080 bun run dev
 ```
 
 ## API
@@ -104,6 +103,35 @@ GET /api/iot-data
 bun install
 bun run build
 bun run start
+```
+
+### 云服务器部署（Linux）
+
+服务器需要安装 Bun、Git，并开放云平台安全组和系统防火墙的 `30000` 端口。首次部署：
+
+```bash
+git clone git@github.com:cos12a/myWeb.git
+cd myWeb
+bun install
+bun run build
+HOST=0.0.0.0 PORT=30000 bun run start
+```
+
+验证访问：
+
+```text
+http://服务器公网IP:30000/
+http://服务器公网IP:30000/stoov-test/
+http://服务器公网IP:30000/stoov-corr/
+```
+
+生产环境建议使用 systemd 或 PM2 保持服务运行，并使用 Nginx/Caddy 反向代理到 `127.0.0.1:30000`，再配置 HTTPS。代码更新后重新执行：
+
+```bash
+git pull
+bun install
+bun run build
+sudo systemctl restart mywebbun
 ```
 
 `bun run build` 会进入 `stoov-test` 执行 Vite 构建和 HTML 压缩；服务器启动后，两个工具分别通过以下地址访问：
