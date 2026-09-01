@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web USB 连接器</title>
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <div class="container">
     <header>
@@ -19,11 +21,11 @@
       <div class="filter-row">
         <label>
           Vendor ID (VID):
-          <input type="text" id="vendorId" placeholder="例: 0x1234" />
+          <input type="text" id="vendorId" placeholder="例: 0x4348" />
         </label>
         <label>
           Product ID (PID):
-          <input type="text" id="productId" placeholder="例: 0x5678" />
+          <input type="text" id="productId" placeholder="例: 0x5537" />
         </label>
         <label class="checkbox-label">
           <input type="checkbox" id="filterAll" checked />
@@ -37,12 +39,30 @@
       <div id="deviceInfo" class="device-info hidden">
         <h3>已连接设备</h3>
         <table>
-          <tr><td>设备名称</td><td id="infoName">-</td></tr>
-          <tr><td>Vendor ID</td><td id="infoVid">-</td></tr>
-          <tr><td>Product ID</td><td id="infoPid">-</td></tr>
-          <tr><td>序列号</td><td id="infoSerial">-</td></tr>
-          <tr><td>配置数</td><td id="infoConfig">-</td></tr>
-          <tr><td>接口数</td><td id="infoInterfaces">-</td></tr>
+          <tr>
+            <td>设备名称</td>
+            <td id="infoName">-</td>
+          </tr>
+          <tr>
+            <td>Vendor ID</td>
+            <td id="infoVid">-</td>
+          </tr>
+          <tr>
+            <td>Product ID</td>
+            <td id="infoPid">-</td>
+          </tr>
+          <tr>
+            <td>序列号</td>
+            <td id="infoSerial">-</td>
+          </tr>
+          <tr>
+            <td>配置数</td>
+            <td id="infoConfig">-</td>
+          </tr>
+          <tr>
+            <td>接口数</td>
+            <td id="infoInterfaces">-</td>
+          </tr>
         </table>
       </div>
     </section>
@@ -121,4 +141,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>

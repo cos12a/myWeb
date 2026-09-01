@@ -2224,6 +2224,14 @@ function setupHeatingPanelListener() {
   });
 }
 
+// ──────── 将内联事件处理器所需的函数暴露到全局作用域 ────────
+// type="module" 的脚本顶层声明不会自动挂载到 window，
+// 而 HTML 中的 onchange / onclick 等内联处理器只能在全局作用域查找函数。
+window.toggleControlMode = toggleControlMode;
+window.startGetSystemInfoRequest = startGetSystemInfoRequest;
+window.clearBleLogs = clearBleLogs;
+window.showCurrSettings = showCurrSettings;
+
 // ========== 键盘快捷键处理 ==========
 function handleKeyboardShortcut(event) {
   // Alt+I: 聚焦条码输入框（全局生效，不受焦点限制）
