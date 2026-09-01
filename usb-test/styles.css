@@ -1,0 +1,369 @@
+/* ===== 基础重置 ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-hover: #222632;
+  --border: #2a2e3a;
+  --text: #e4e6eb;
+  --text-dim: #8b8fa3;
+  --primary: #4f8cff;
+  --primary-hover: #3a7aff;
+  --success: #34d399;
+  --success-hover: #2bc48a;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --radius: 10px;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 16px 80px;
+}
+
+/* ===== Header ===== */
+header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  margin-top: 4px;
+}
+
+/* ===== Card ===== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+
+.card h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+  color: var(--primary);
+}
+
+/* ===== 表单元素 ===== */
+input[type="text"],
+select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 7px 12px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input[type="text"]:focus,
+select:focus {
+  border-color: var(--primary);
+}
+
+label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-label {
+  cursor: pointer;
+}
+
+.checkbox-label input {
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+}
+
+/* ===== 按钮 ===== */
+.btn {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+  color: #fff;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary { background: var(--primary); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+.btn-success { background: var(--success); color: #111; }
+.btn-success:hover:not(:disabled) { background: var(--success-hover); }
+
+.btn-warning { background: var(--warning); color: #111; }
+.btn-warning:hover:not(:disabled) { background: #e5a920; }
+
+.btn-danger { background: var(--danger); }
+.btn-danger:hover:not(:disabled) { background: var(--danger-hover); }
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-sm:hover { background: var(--border); }
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.btn-outline:hover { background: var(--surface-hover); color: var(--text); }
+
+.btn-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* ===== 连接面板 ===== */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+
+.filter-row label {
+  flex: 1;
+  min-width: 180px;
+}
+
+.filter-row input[type="text"] {
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* ===== 设备信息表 ===== */
+.device-info {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.device-info h3 {
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+  color: var(--success);
+}
+
+.device-info table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.device-info td {
+  padding: 5px 8px;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.device-info td:first-child {
+  color: var(--text-dim);
+  width: 120px;
+}
+
+/* ===== 配置面板 ===== */
+.config-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.config-row label {
+  flex: 1;
+  min-width: 140px;
+}
+
+.config-row select {
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* ===== 通信面板 ===== */
+.comm-section {
+  margin-bottom: 18px;
+}
+
+.comm-section h3 {
+  font-size: 0.95rem;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.send-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.send-row select {
+  flex-shrink: 0;
+}
+
+.send-row input {
+  flex: 1;
+}
+
+.quick-send {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.receive-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.receive-log {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
+.receive-log:empty::before {
+  content: '等待接收数据...';
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.log-entry {
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.log-entry .timestamp {
+  color: var(--text-dim);
+  margin-right: 8px;
+}
+
+.log-entry .direction {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.log-entry .direction.in { color: var(--success); }
+.log-entry .direction.out { color: var(--primary); }
+
+.log-entry .data-hex {
+  color: var(--warning);
+}
+
+.log-entry .data-text {
+  color: var(--text);
+}
+
+/* ===== 状态栏 ===== */
+.status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 24px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-bar::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.3s;
+}
+
+.status-bar.connected::before { background: var(--success); }
+.status-bar.error::before { background: var(--danger); }
+
+/* ===== 工具类 ===== */
+.hidden { display: none !important; }
+
+/* ===== 滚动条 ===== */
+.receive-log::-webkit-scrollbar {
+  width: 6px;
+}
+
+.receive-log::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.receive-log::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 600px) {
+  .container { padding: 16px 10px 70px; }
+  .card { padding: 16px; }
+  .filter-row { flex-direction: column; }
+  .send-row { flex-direction: column; align-items: stretch; }
+}

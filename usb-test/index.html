@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web USB 连接器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔌 Web USB 连接器</h1>
+      <p class="subtitle">连接自定义 USB 设备进行数据通信</p>
+    </header>
+
+    <!-- 连接区域 -->
+    <section class="card connection-panel">
+      <h2>设备连接</h2>
+      <div class="filter-row">
+        <label>
+          Vendor ID (VID):
+          <input type="text" id="vendorId" placeholder="例: 0x1234" />
+        </label>
+        <label>
+          Product ID (PID):
+          <input type="text" id="productId" placeholder="例: 0x5678" />
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="filterAll" checked />
+          不过滤（显示所有设备）
+        </label>
+      </div>
+      <div class="btn-group">
+        <button id="btnConnect" class="btn btn-primary">连接设备</button>
+        <button id="btnDisconnect" class="btn btn-danger" disabled>断开连接</button>
+      </div>
+      <div id="deviceInfo" class="device-info hidden">
+        <h3>已连接设备</h3>
+        <table>
+          <tr><td>设备名称</td><td id="infoName">-</td></tr>
+          <tr><td>Vendor ID</td><td id="infoVid">-</td></tr>
+          <tr><td>Product ID</td><td id="infoPid">-</td></tr>
+          <tr><td>序列号</td><td id="infoSerial">-</td></tr>
+          <tr><td>配置数</td><td id="infoConfig">-</td></tr>
+          <tr><td>接口数</td><td id="infoInterfaces">-</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- 接口配置 -->
+    <section class="card config-panel hidden" id="configPanel">
+      <h2>接口配置</h2>
+      <div class="config-row">
+        <label>
+          配置号:
+          <select id="configNum"></select>
+        </label>
+        <label>
+          接口号:
+          <select id="interfaceNum"></select>
+        </label>
+        <label>
+          端点 (IN):
+          <select id="endpointIn"></select>
+        </label>
+        <label>
+          端点 (OUT):
+          <select id="endpointOut"></select>
+        </label>
+      </div>
+      <button id="btnClaim" class="btn btn-success">声明接口</button>
+    </section>
+
+    <!-- 数据收发区域 -->
+    <section class="card comm-panel hidden" id="commPanel">
+      <h2>数据通信</h2>
+
+      <div class="comm-section">
+        <h3>发送数据</h3>
+        <div class="send-row">
+          <select id="sendFormat">
+            <option value="text">文本</option>
+            <option value="hex">HEX</option>
+            <option value="array">字节数组</option>
+          </select>
+          <input type="text" id="sendData" placeholder="输入要发送的数据..." />
+          <button id="btnSend" class="btn btn-primary">发送</button>
+        </div>
+        <div class="quick-send">
+          <button class="btn btn-sm" data-cmd="0x01">LED ON</button>
+          <button class="btn btn-sm" data-cmd="0x02">LED OFF</button>
+          <button class="btn btn-sm" data-cmd="0x03">读取状态</button>
+          <button class="btn btn-sm" data-cmd="0x04">重启设备</button>
+        </div>
+      </div>
+
+      <div class="comm-section">
+        <h3>接收数据</h3>
+        <div class="receive-controls">
+          <button id="btnStartRead" class="btn btn-success">开始监听</button>
+          <button id="btnStopRead" class="btn btn-warning" disabled>停止监听</button>
+          <label>
+            显示格式:
+            <select id="receiveFormat">
+              <option value="text">文本</option>
+              <option value="hex">HEX</option>
+              <option value="both">文本 + HEX</option>
+            </select>
+          </label>
+          <button id="btnClearLog" class="btn btn-sm btn-outline">清空日志</button>
+        </div>
+        <div id="receiveLog" class="receive-log"></div>
+      </div>
+    </section>
+
+    <!-- 状态栏 -->
+    <footer id="statusBar" class="status-bar">
+      <span id="statusText">就绪 - 请连接 USB 设备</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

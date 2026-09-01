@@ -2,8 +2,16 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import api from "./routes/api";
 import stoov from "./routes/stoov";
+import { logger } from "hono/logger"; // 导入 Logger 中间件
+import { createHealthRoutes } from "./health";
 
 const app = new Hono();
+
+app.use(logger()); // 使用 Logger 中间件
+// ---------- 健康检查（必须放在静态路由之前） ----------
+const dbDir =
+  process.env.STOOV_DB_DIR || "/home/yzluo/unito/sqlit-db/stoov-bed";
+createHealthRoutes(app, dbDir);
 
 // 挂载 API 路由
 app.route("/api", api);
@@ -32,6 +40,24 @@ app.use(
 );
 app.get("/stoov-corr", serveStatic({ path: "./stoov-corr/index.html" }));
 app.get("/stoov-corr/", serveStatic({ path: "./stoov-corr/index.html" }));
+
+// STM32 Web 烧录工具：将公开 URL 映射到 stm32WebFlasher 的 dist 目录
+app.use(
+  "/stm32flasher/*",
+  serveStatic({
+    root: "./",
+    rewriteRequestPath: (path: string) =>
+      path.replace(/^\/stm32flasher/, "/stm32WebFlasher/dist"),
+  }),
+);
+app.get(
+  "/stm32flasher",
+  serveStatic({ path: "./stm32WebFlasher/dist/index.html" }),
+);
+app.get(
+  "/stm32flasher/",
+  serveStatic({ path: "./stm32WebFlasher/dist/index.html" }),
+);
 
 // 托管 public 目录下的静态文件
 app.use("/*", serveStatic({ root: "./public" }));

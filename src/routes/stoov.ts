@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 
 const stoov = new Hono();
 
@@ -62,6 +63,16 @@ stoov.post("/test-data/download", async (c: Context) => {
     databaseDirectory,
     mode === "internal" ? "Heating.db" : "yaokong.db",
   );
+
+  console.log(`尝试打开数据库：${databasePath}`); // 添加这行
+
+  if (!existsSync(databasePath)) {
+    console.error(`数据库文件不存在：${databasePath}`);
+    return c.json(
+      { success: false, message: `数据库文件不存在（${mode}）` },
+      404,
+    );
+  }
 
   try {
     const database = new Database(databasePath, { readonly: true });
