@@ -102,6 +102,9 @@ let periodTimer = null;
 let periodRemaining = 0;
 let rateTimer = null;
 let reconnectTarget = null;
+let failedDevices = new Set();
+
+function deviceKey(vid, pid) { return `${vid}:${pid}`; }
 
 // ===== USB Class 名称映射 =====
 const USB_CLASS_NAMES = {
@@ -431,7 +434,9 @@ async function connectDevice() {
   try {
     await openDevice(dev);
   } catch (err) {
-    // 打开设备阶段
+    // 打开失败：登记到失败名单，禁止该设备自动重连
+    failedDevices.add(deviceKey(dev.vendorId, dev.productId));
+    device = null;
     switch (err.name) {
       case "NotFoundError":
         setStatus("设备已消失：所选设备已拔出或不可用", "error");
@@ -459,12 +464,21 @@ async function connectDevice() {
 }
 
 async function openDevice(dev) {
+  // 先打开，失败则抛出且不污染全局 device
+  await dev.open();
   device = dev;
-  await device.open();
-  if (device.configuration === null && device.configurations.length > 0) {
-    await device.selectConfiguration(1);
+  try {
+    if (device.configuration === null && device.configurations.length > 0) {
+      await device.selectConfiguration(1);
+    }
+  } catch (err) {
+    try { await device.close(); } catch (_) {}
+    device = null;
+    throw err;
   }
+  // 打开成功：登记重连目标，从失败名单移除
   reconnectTarget = { vid: device.vendorId, pid: device.productId };
+  failedDevices.delete(deviceKey(device.vendorId, device.productId));
   showDeviceInfo();
   populateConfig();
   dom.btnConnect.disabled = true;
@@ -631,16 +645,22 @@ function onDisconnect(event) {
 
 async function onConnect(event) {
   const dev = event.device;
+  const key = deviceKey(dev.vendorId, dev.productId);
+  // 连接失败过的设备不自动重连
   if (dom.autoReconnect.checked && reconnectTarget &&
-      dev.vendorId === reconnectTarget.vid && dev.productId === reconnectTarget.pid) {
+      dev.vendorId === reconnectTarget.vid && dev.productId === reconnectTarget.pid &&
+      !failedDevices.has(key)) {
     setStatus("检测到目标设备插入，正在重连...", "connected");
     try {
       await openDevice(dev);
       reconnectTarget = null;
     } catch (err) {
+      failedDevices.add(key);
       console.error("自动重连失败:", err);
-      setStatus(`自动重连失败: ${err.message}`, "error");
+      setStatus(`自动重连失败: ${err.message}（已停止对该设备的自动重连）`, "error");
     }
+  } else if (failedDevices.has(key)) {
+    setStatus(`检测到设备插入但曾连接失败，已跳过: ${dev.productName || "Unknown"} (VID:${dev.vendorId} PID:${dev.productId})`);
   } else {
     setStatus(`检测到设备插入: ${dev.productName || "Unknown"} (VID:${dev.vendorId} PID:${dev.productId})`);
   }
@@ -653,7 +673,9 @@ async function refreshPairedDevices() {
     devices.forEach((d, i) => {
       const opt = document.createElement("option");
       opt.value = i;
-      opt.textContent = `${d.productName || "Unknown"} (VID:${d.vendorId} PID:${d.productId})`;
+      const failed = failedDevices.has(deviceKey(d.vendorId, d.productId));
+      const tag = failed ? " ⚠曾失败(不会自动重连)" : "";
+      opt.textContent = `${d.productName || "Unknown"} (VID:${d.vendorId} PID:${d.productId})${tag}`;
       dom.pairedDevices.appendChild(opt);
     });
     if (devices.length === 0) setStatus("无已授权设备，请先连接一次以授权");
@@ -864,7 +886,8 @@ dom.pairedDevices.addEventListener("change", async () => {
     const dev = devices[idx];
     if (dev) await openDevice(dev);
   } catch (err) {
-    setStatus(`打开已授权设备失败: ${err.message}`, "error");
+    device = null;
+    setStatus(`打开已授权设备失败: ${err.message}（该设备不会自动重连）`, "error");
   }
 });
 
