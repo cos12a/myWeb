@@ -16,7 +16,7 @@
     </header>
 
     <!-- 连接区域 -->
-    <section class="card connection-panel">
+    <section class="card">
       <h2>设备连接</h2>
       <div class="filter-row">
         <label>
@@ -35,66 +35,94 @@
       <div class="btn-group">
         <button id="btnConnect" class="btn btn-primary">连接设备</button>
         <button id="btnDisconnect" class="btn btn-danger" disabled>断开连接</button>
+        <button id="btnRefreshDevices" class="btn btn-outline">刷新已授权</button>
+      </div>
+      <div class="paired-row">
+        <label>
+          已授权设备（免弹窗）:
+          <select id="pairedDevices">
+            <option value="">-- 无 --</option>
+          </select>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="autoReconnect" />
+          自动重连
+        </label>
       </div>
       <div id="deviceInfo" class="device-info hidden">
         <h3>已连接设备</h3>
         <table>
-          <tr>
-            <td>设备名称</td>
-            <td id="infoName">-</td>
-          </tr>
-          <tr>
-            <td>Vendor ID</td>
-            <td id="infoVid">-</td>
-          </tr>
-          <tr>
-            <td>Product ID</td>
-            <td id="infoPid">-</td>
-          </tr>
-          <tr>
-            <td>序列号</td>
-            <td id="infoSerial">-</td>
-          </tr>
-          <tr>
-            <td>配置数</td>
-            <td id="infoConfig">-</td>
-          </tr>
-          <tr>
-            <td>接口数</td>
-            <td id="infoInterfaces">-</td>
-          </tr>
+          <tr><td>设备名称</td><td id="infoName">-</td></tr>
+          <tr><td>Vendor ID</td><td id="infoVid">-</td></tr>
+          <tr><td>Product ID</td><td id="infoPid">-</td></tr>
+          <tr><td>序列号</td><td id="infoSerial">-</td></tr>
+          <tr><td>配置数</td><td id="infoConfig">-</td></tr>
+          <tr><td>接口数</td><td id="infoInterfaces">-</td></tr>
+          <tr><td>USB Class</td><td id="infoClass">-</td></tr>
+          <tr><td>USB 版本</td><td id="infoVersion">-</td></tr>
         </table>
+        <details class="descriptor-tree">
+          <summary>设备描述符树</summary>
+          <pre id="descriptorTree"></pre>
+        </details>
       </div>
     </section>
 
     <!-- 接口配置 -->
-    <section class="card config-panel hidden" id="configPanel">
+    <section class="card hidden" id="configPanel">
       <h2>接口配置</h2>
       <div class="config-row">
-        <label>
-          配置号:
-          <select id="configNum"></select>
-        </label>
-        <label>
-          接口号:
-          <select id="interfaceNum"></select>
-        </label>
-        <label>
-          端点 (IN):
-          <select id="endpointIn"></select>
-        </label>
-        <label>
-          端点 (OUT):
-          <select id="endpointOut"></select>
-        </label>
+        <label>配置号: <select id="configNum"></select></label>
+        <label>接口号: <select id="interfaceNum"></select></label>
+        <label>Alternate: <select id="altSetting"></select></label>
+        <label>端点 (IN): <select id="endpointIn"></select></label>
+        <label>端点 (OUT): <select id="endpointOut"></select></label>
       </div>
-      <button id="btnClaim" class="btn btn-success">声明接口</button>
+      <div class="btn-group">
+        <button id="btnClaim" class="btn btn-success">声明接口</button>
+        <button id="btnRelease" class="btn btn-warning" disabled>释放接口</button>
+      </div>
     </section>
 
-    <!-- 数据收发区域 -->
-    <section class="card comm-panel hidden" id="commPanel">
+    <!-- 控制传输 -->
+    <section class="card hidden" id="controlPanel">
+      <h2>控制传输 (Control Transfer)</h2>
+      <div class="control-grid">
+        <label>方向:
+          <select id="ctrlDir">
+            <option value="out">OUT (Host→Device)</option>
+            <option value="in">IN (Device→Host)</option>
+          </select>
+        </label>
+        <label>请求类型:
+          <select id="ctrlType">
+            <option value="standard">Standard</option>
+            <option value="class">Class</option>
+            <option value="vendor" selected>Vendor</option>
+          </select>
+        </label>
+        <label>接收者:
+          <select id="ctrlRecipient">
+            <option value="device" selected>Device</option>
+            <option value="interface">Interface</option>
+            <option value="endpoint">Endpoint</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>bRequest (hex): <input type="text" id="ctrlRequest" value="0x00"></label>
+        <label>wValue (hex): <input type="text" id="ctrlValue" value="0x0000"></label>
+        <label>wIndex (hex): <input type="text" id="ctrlIndex" value="0x0000"></label>
+        <label>wLength: <input type="number" id="ctrlLength" min="0" max="65535" value="64"></label>
+      </div>
+      <label class="ctrl-data-label">OUT 数据 (hex, 可选): <input type="text" id="ctrlData" placeholder="如 01 02 03"></label>
+      <button id="btnControlSend" class="btn btn-primary">发送控制传输</button>
+    </section>
+
+    <!-- 数据通信 -->
+    <section class="card hidden" id="commPanel">
       <h2>数据通信</h2>
 
+      <!-- 发送 -->
       <div class="comm-section">
         <h3>发送数据</h3>
         <div class="send-row">
@@ -106,6 +134,20 @@
           <input type="text" id="sendData" placeholder="输入要发送的数据..." />
           <button id="btnSend" class="btn btn-primary">发送</button>
         </div>
+        <div class="send-extras">
+          <label>历史:
+            <select id="sendHistory"><option value="">-- 无 --</option></select>
+          </label>
+          <button id="btnSendFile" class="btn btn-sm">发送文件...</button>
+          <input type="file" id="fileInput" class="hidden" />
+          <label class="checkbox-label"><input type="checkbox" id="echoSend" checked /> 发送回显</label>
+        </div>
+        <div class="periodic-send">
+          <label>间隔(ms): <input type="number" id="periodInterval" min="10" value="1000" /></label>
+          <label>次数(0=无限): <input type="number" id="periodCount" min="0" value="0" /></label>
+          <button id="btnStartPeriod" class="btn btn-success btn-sm">开始定时</button>
+          <button id="btnStopPeriod" class="btn btn-warning btn-sm" disabled>停止定时</button>
+        </div>
         <div class="quick-send">
           <button class="btn btn-sm" data-cmd="0x01">LED ON</button>
           <button class="btn btn-sm" data-cmd="0x02">LED OFF</button>
@@ -114,26 +156,46 @@
         </div>
       </div>
 
+      <!-- 接收 -->
       <div class="comm-section">
         <h3>接收数据</h3>
         <div class="receive-controls">
           <button id="btnStartRead" class="btn btn-success">开始监听</button>
           <button id="btnStopRead" class="btn btn-warning" disabled>停止监听</button>
-          <label>
-            显示格式:
+          <label class="checkbox-label"><input type="checkbox" id="readAllIn" /> 监听全部 IN 端点</label>
+          <label>读取长度: <input type="number" id="readLength" min="1" max="65536" value="64" /></label>
+          <label>显示格式:
             <select id="receiveFormat">
               <option value="text">文本</option>
               <option value="hex">HEX</option>
-              <option value="both">文本 + HEX</option>
+              <option value="both" selected>文本 + HEX</option>
             </select>
           </label>
-          <button id="btnClearLog" class="btn btn-sm btn-outline">清空日志</button>
+          <label>过滤:
+            <select id="logFilter">
+              <option value="all">全部</option>
+              <option value="in">仅 IN</option>
+              <option value="out">仅 OUT</option>
+            </select>
+          </label>
+          <label class="checkbox-label"><input type="checkbox" id="logPause" /> 暂停</label>
+          <label class="checkbox-label"><input type="checkbox" id="autoScroll" checked /> 自动滚动</label>
+          <button id="btnClearLog" class="btn btn-sm btn-outline">清空</button>
+          <button id="btnExportLog" class="btn btn-sm btn-outline">导出日志</button>
+          <button id="btnExportBin" class="btn btn-sm btn-outline">导出接收.bin</button>
         </div>
         <div id="receiveLog" class="receive-log"></div>
       </div>
+
+      <!-- 统计 -->
+      <div class="stats-bar">
+        <span>发送: <b id="statTxBytes">0</b> B / <b id="statTxPackets">0</b> 包</span>
+        <span>接收: <b id="statRxBytes">0</b> B / <b id="statRxPackets">0</b> 包</span>
+        <span>速率: <b id="statRate">0</b> B/s</span>
+        <span>运行: <b id="statUptime">00:00</b></span>
+      </div>
     </section>
 
-    <!-- 状态栏 -->
     <footer id="statusBar" class="status-bar">
       <span id="statusText">就绪 - 请连接 USB 设备</span>
     </footer>
