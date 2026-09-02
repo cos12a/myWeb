@@ -181,14 +181,8 @@ async function connectDevice() {
     dom.btnDisconnect.disabled = false;
     dom.configPanel.classList.remove("hidden");
 
-    // 监听断开事件
-    // device.addEventListener('disconnect', onDisconnect);
-    // 兼容注册断开事件
-    if (typeof device.addEventListener === "function") {
-      device.addEventListener("disconnect", onDisconnect);
-    } else if (typeof device.ondisconnect !== "undefined") {
-      device.ondisconnect = onDisconnect;
-    }
+    // 注意：disconnect 事件在 navigator.usb 上监听（见文件末尾事件绑定），
+    // USBDevice 本身不提供 disconnect 事件。
   } catch (err) {
     if (err.name === "NotFoundError") {
       setStatus("未选择设备");
@@ -356,13 +350,7 @@ async function disconnectDevice() {
     stopReading();
 
     if (device) {
-      // device.removeEventListener("disconnect", onDisconnect);
-      // 兼容方式移除断开事件
-      if (typeof device.removeEventListener === "function") {
-        device.removeEventListener("disconnect", onDisconnect);
-      } else if (typeof device.ondisconnect !== "undefined") {
-        device.ondisconnect = null;
-      }
+
       await device.close();
     }
   } catch (err) {
@@ -382,8 +370,12 @@ async function disconnectDevice() {
   setStatus("设备已断开");
 }
 
-/** 设备意外断开回调 */
-function onDisconnect() {
+/** 设备意外断开回调（由 navigator.usb 的 disconnect 事件触发）
+ *  @param {USBConnectionEvent} [event] - 事件对象；主动调用时可省略
+ */
+function onDisconnect(event) {
+  // 只处理当前连接的设备，忽略其他设备的断开
+  if (event && event.device && event.device !== device) return;
   stopReading();
   device = null;
   dom.btnConnect.disabled = false;
@@ -393,11 +385,16 @@ function onDisconnect() {
   dom.commPanel.classList.add("hidden");
   dom.btnClaim.disabled = false;
   dom.btnClaim.textContent = "声明接口";
-  dom.receiveLog.innerHTML = ""; // ✅ 新增：清空日志
+  dom.receiveLog.innerHTML = ""; // 清空日志
   setStatus("设备已意外断开", "error");
 }
 
 // ===== 事件绑定 =====
+
+// 全局监听 WebUSB 设备断开事件（USBDevice 自身无 disconnect 事件，必须在 navigator.usb 上监听）
+if (navigator.usb && typeof navigator.usb.addEventListener === "function") {
+  navigator.usb.addEventListener("disconnect", onDisconnect);
+}
 
 dom.btnConnect.addEventListener("click", connectDevice);
 dom.btnDisconnect.addEventListener("click", disconnectDevice);
