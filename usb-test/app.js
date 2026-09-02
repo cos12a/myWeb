@@ -322,9 +322,19 @@ async function startReading() {
           addLog("in", new Uint8Array(result.data.buffer));
         }
       } catch (err) {
-        if (reading) {
+        // 设备物理拔掉时 transferIn 会抛出 NetworkError，属于正常断开而非读取错误
+        const isDeviceGone =
+          err.name === "NetworkError" ||
+          err.name === "NotFoundError" ||
+          !device ||
+          (typeof device.opened === "boolean" && !device.opened);
+        if (reading && !isDeviceGone) {
           console.error("读取错误:", err);
           addLog("in", new TextEncoder().encode(`[错误] ${err.message}`));
+        }
+        // 若 disconnect 事件尚未触发，主动清理 UI（避免界面停留在"正在监听"状态）
+        if (isDeviceGone && device) {
+          onDisconnect();
         }
         break;
       }
