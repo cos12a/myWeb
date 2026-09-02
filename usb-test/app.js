@@ -383,6 +383,7 @@ function onDisconnect() {
   dom.commPanel.classList.add("hidden");
   dom.btnClaim.disabled = false;
   dom.btnClaim.textContent = "声明接口";
+  dom.receiveLog.innerHTML = ""; // ✅ 新增：清空日志
   setStatus("设备已意外断开", "error");
 }
 

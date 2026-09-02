@@ -32,3 +32,7 @@ report.*.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# tool-generated indexes/caches
+.arts/
+.codegraph/
