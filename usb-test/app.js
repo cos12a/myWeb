@@ -393,6 +393,7 @@ function findEndpoint(direction, epNum) {
 // ===== 核心流程 =====
 
 async function connectDevice() {
+  let dev;
   try {
     const filters = dom.filterAll.checked
       ? []
@@ -404,12 +405,56 @@ async function connectDevice() {
           if (pid !== undefined) f.productId = pid;
           return Object.keys(f).length ? [f] : [];
         })();
-    const dev = await navigator.usb.requestDevice({ filters });
+    dev = await navigator.usb.requestDevice({ filters });
+  } catch (err) {
+    // 设备选择阶段
+    switch (err.name) {
+      case "NotFoundError":
+        setStatus("未选择设备：用户取消选择，或没有匹配 VID/PID 的设备");
+        break;
+      case "SecurityError":
+        setStatus("无法请求设备：页面需通过 HTTPS 或 localhost 访问，且须由用户手势触发", "error");
+        break;
+      case "AbortError":
+        setStatus("设备选择请求已中止", "error");
+        break;
+      case "IndexSizeError":
+        setStatus("VID/PID 参数无效，请检查输入格式", "error");
+        break;
+      default:
+        setStatus(`请求设备失败: ${err.message || err.name}`, "error");
+    }
+    console.error("连接错误(选择阶段):", err);
+    return;
+  }
+
+  try {
     await openDevice(dev);
   } catch (err) {
-    if (err.name === "NotFoundError") setStatus("未选择设备");
-    else setStatus(`连接失败: ${err.message}`, "error");
-    console.error("连接错误:", err);
+    // 打开设备阶段
+    switch (err.name) {
+      case "NotFoundError":
+        setStatus("设备已消失：所选设备已拔出或不可用", "error");
+        break;
+      case "SecurityError":
+        setStatus("打开设备被拒绝：安全限制或缺少权限", "error");
+        break;
+      case "NotAllowedError":
+        setStatus("打开设备被拒绝：权限不足", "error");
+        break;
+      case "NotReadableError":
+        setStatus("无法访问设备：可能被系统驱动占用（如内核驱动已声明接口）", "error");
+        break;
+      case "InvalidStateError":
+        setStatus("设备状态异常：可能已被打开或配置不可用", "error");
+        break;
+      case "NetworkError":
+        setStatus("打开设备时发生网络/传输错误", "error");
+        break;
+      default:
+        setStatus(`打开设备失败: ${err.message || err.name}`, "error");
+    }
+    console.error("连接错误(打开阶段):", err);
   }
 }
 
