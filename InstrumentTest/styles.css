@@ -1,0 +1,140 @@
+/* ===== 仪器指标面板 - 深色科技风，手机适配 ===== */
+:root {
+  --bg: #0b1020;
+  --surface: #151c2e;
+  --surface-2: #1d2740;
+  --border: rgba(255, 255, 255, .08);
+  --text: #e8eef7;
+  --muted: #8a97b0;
+  --accent: #4f8cff;
+  --accent-2: #34d399;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  background: radial-gradient(1200px 600px at 50% -10%, #1a2540, var(--bg));
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app { max-width: 720px; margin: 0 auto; padding: 24px 16px 40px; }
+
+.app-header { text-align: center; margin-bottom: 22px; }
+.app-header h1 { font-size: 1.5rem; font-weight: 700; }
+.subtitle { color: var(--muted); font-size: .85rem; }
+
+/* ===== 蓝牙操作栏 ===== */
+.ble-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+.ble-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: .88rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: var(--accent);
+  transition: opacity .2s, transform .1s;
+}
+.ble-btn:disabled { opacity: .4; cursor: not-allowed; }
+.ble-btn:active:not(:disabled) { transform: scale(.97); }
+.ble-btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.ble-btn.primary { background: linear-gradient(135deg, var(--accent), #6aa6ff); padding: 12px 24px; }
+
+.ble-status { margin-left: auto; font-size: .85rem; color: var(--muted); }
+.ble-status.ok { color: var(--accent-2); }
+
+/* ===== 指标卡片网格 ===== */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.metric-card {
+  background: linear-gradient(160deg, var(--surface), var(--surface-2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  position: relative;
+  overflow: hidden;
+}
+.metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: .5;
+  background: radial-gradient(120px 80px at 80% 0%, rgba(79, 140, 255, .12), transparent);
+  pointer-events: none;
+}
+
+.metric-label {
+  font-size: .8rem;
+  color: var(--muted);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.metric-value { display: flex; align-items: baseline; gap: 6px; }
+.metric-value .num {
+  font-size: 1.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: -.02em;
+}
+.metric-value .unit { font-size: .85rem; color: var(--muted); }
+
+/* ===== 未连接遮罩 ===== */
+.ble-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 12, 24, .72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 10;
+  padding: 20px;
+}
+.ble-overlay.hidden { display: none; }
+
+.overlay-card {
+  text-align: center;
+  padding: 32px 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  max-width: 320px;
+  width: 100%;
+}
+.overlay-icon { font-size: 2.4rem; margin-bottom: 12px; }
+.overlay-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
+.overlay-desc { color: var(--muted); font-size: .85rem; margin-bottom: 18px; }
+
+.app-footer { text-align: center; margin-top: 24px; color: var(--muted); font-size: .75rem; }
+
+/* ===== 手机适配 ===== */
+@media (max-width: 480px) {
+  .app { padding: 18px 12px 32px; }
+  .metric-value .num { font-size: 1.4rem; }
+  .metric-card { padding: 14px 12px; }
+  .ble-status { margin-left: 0; width: 100%; }
+}

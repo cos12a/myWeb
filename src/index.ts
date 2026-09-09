@@ -41,6 +41,18 @@ app.use(
 app.get("/stoov-corr", serveStatic({ path: "./stoov-corr/index.html" }));
 app.get("/stoov-corr/", serveStatic({ path: "./stoov-corr/index.html" }));
 
+// InstrumentTest 仪器指标面板：托管原生静态页面（Web Bluetooth + NUS 透传）
+app.use(
+  "/instrument/*",
+  serveStatic({
+    root: "./",
+    rewriteRequestPath: (path: string) =>
+      path.replace(/^\/instrument/, "/InstrumentTest"),
+  }),
+);
+app.get("/instrument", serveStatic({ path: "./InstrumentTest/index.html" }));
+app.get("/instrument/", serveStatic({ path: "./InstrumentTest/index.html" }));
+
 // STM32 Web 烧录工具：将公开 URL 映射到 stm32WebFlasher 的 dist 目录
 app.use(
   "/stm32flasher/*",
