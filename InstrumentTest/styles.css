@@ -102,8 +102,8 @@ body {
 }
 .metric-value .unit { font-size: .85rem; color: var(--muted); }
 
-/* ===== 未连接遮罩 ===== */
-.ble-overlay {
+/* ===== 进入提示弹窗（一次性，确定后进入主页） ===== */
+.intro-overlay {
   position: fixed;
   inset: 0;
   display: grid;
@@ -114,9 +114,9 @@ body {
   z-index: 10;
   padding: 20px;
 }
-.ble-overlay.hidden { display: none; }
+.intro-overlay.hidden { display: none; }
 
-.overlay-card {
+.intro-card {
   text-align: center;
   padding: 32px 28px;
   background: var(--surface);
@@ -125,9 +125,12 @@ body {
   max-width: 320px;
   width: 100%;
 }
-.overlay-icon { font-size: 2.4rem; margin-bottom: 12px; }
-.overlay-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
-.overlay-desc { color: var(--muted); font-size: .85rem; margin-bottom: 18px; }
+.intro-icon { font-size: 2.4rem; margin-bottom: 12px; }
+.intro-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
+.intro-desc { color: var(--muted); font-size: .85rem; margin-bottom: 18px; line-height: 1.6; }
+
+/* ===== 工具类 ===== */
+.hidden { display: none !important; }
 
 .app-footer { text-align: center; margin-top: 24px; color: var(--muted); font-size: .75rem; }
 
