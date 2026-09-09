@@ -86,8 +86,8 @@ body::before {
 }
 .subtitle { margin-top: 10px; color: var(--muted); font-size: .82rem; letter-spacing: .04em; }
 
-/* ===== 蓝牙操作栏 ===== */
-.ble-bar {
+/* ===== 连接栏（蓝牙 / 串口通用） ===== */
+.conn-bar {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -121,6 +121,25 @@ body::before {
 
 .ble-status { margin-left: auto; font-size: .82rem; color: var(--muted); font-family: var(--mono); }
 .ble-status.ok { color: var(--accent-2); }
+
+.conn-label {
+  font: 600 .72rem var(--mono);
+  letter-spacing: .14em;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding-right: 4px;
+  border-right: 1px solid var(--border);
+  margin-right: 2px;
+}
+.serial-baud {
+  font-family: var(--mono);
+  font-size: .76rem;
+  color: var(--accent);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(91, 156, 255, .08);
+}
 
 /* ===== 指标卡片网格 ===== */
 .metrics {
