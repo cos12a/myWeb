@@ -68,7 +68,7 @@ export class InstrumentPanel {
           <span class="conn-label">串口</span>
           <button class="ble-btn" data-act="serial-connect">连接</button>
           <button class="ble-btn ghost" data-act="serial-disconnect" disabled>断开</button>
-          <span class="serial-baud">921600</span>
+
           <span class="ble-status" data-role="serial-status">● 未连接</span>
         </div>
         <div class="metrics">
