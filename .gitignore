@@ -4,6 +4,7 @@
 # temporary build output
 # dist/ is intentionally tracked because deployment uses built assets.
 out/
+InstrumentTestLit/dist/
 *.tgz
 
 # code coverage

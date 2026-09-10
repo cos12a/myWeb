@@ -1,33 +1,593 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0b1020">
-  <title>仪器指标 · Web Bluetooth</title>
-  <link rel="stylesheet" href="styles.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BLE 配对测试</title>
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f1115;
+    color: #e6e6e6;
+  }
+</style>
 </head>
-
 <body>
-  <div class="app">
-    <header class="app-header">
-      <div class="header-eyebrow">
-        <span class="pulse-dot" aria-hidden="true"></span>
-        <span>REAL-TIME · WEB BLUETOOTH</span>
-      </div>
-      <h1>仪器指标</h1>
-      <p class="subtitle">VBUS / VSHUNT / IBUS / PBUS 实时监测</p>
-    </header>
-    <div id="instrument"></div>
-    <footer class="app-footer">
-      <small>BLE 透传 · Nordic UART Service · JSON 行协议</small>
-    </footer>
-  </div>
-  <script type="module">
-    import { InstrumentPanel } from "./instrument.js";
-    new InstrumentPanel(document.getElementById("instrument"));
-  </script>
-</body>
+<ble-test></ble-test>
 
+<script type="module">
+import { LitElement, html, css } from "https://cdn.jsdelivr.net/npm/lit@3/+esm";
+
+export const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+export const NUS_TX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+export const NUS_RX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+
+const PAIR_TIMEOUT_MS = 30000;
+
+class BleController {
+  constructor(host, cb = {}) {
+    this.host = host;
+    this.cb = cb;
+    this.device = null;
+    this.server = null;
+    this.txChar = null;
+    this.rxChar = null;
+    this.rxBuf = "";
+    this.decoder = new TextDecoder();
+    this.encoder = new TextEncoder();
+    this.onDisconnectedBound = () => this.onDisconnected();
+
+    this.status = "idle";
+    this.errorMessage = null;
+
+    host.addController(this);
+  }
+
+  get connected() {
+    return !!this.device?.gatt?.connected;
+  }
+
+  set(status, error = null) {
+    this.status = status;
+    this.errorMessage = error;
+    this.cb.onStatus?.(status, error);
+    this.host.requestUpdate();
+  }
+
+  cleanup() {
+    this.server = null;
+    this.txChar = null;
+    this.rxChar = null;
+    this.rxBuf = "";
+  }
+
+  describeError(err) {
+    if (err instanceof DOMException) {
+      switch (err.name) {
+        case "SecurityError": return "配对失败或被取消，请重新配对";
+        case "NetworkError": return "连接中断，请重试";
+        case "NotFoundError": return "未找到服务或特征，请检查 UUID";
+        case "NotSupportedError": return "设备不支持该操作";
+        case "InvalidStateError": return "GATT 未连接";
+      }
+    }
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  withTimeout(p, ms, msg) {
+    return Promise.race([
+      p,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+    ]);
+  }
+
+  async pickDevice(namePrefix) {
+    if (!navigator.bluetooth) {
+      throw new Error("当前浏览器不支持 Web Bluetooth，请使用 Chrome / Edge / Android Chrome");
+    }
+    this.set("selecting");
+    const reqOpts = { optionalServices: [NUS_SERVICE] };
+    if (namePrefix) reqOpts.filters = [{ namePrefix }];
+    else reqOpts.acceptAllDevices = true;
+
+    try {
+      this.device = await navigator.bluetooth.requestDevice(reqOpts);
+      this.device.removeEventListener("gattserverdisconnected", this.onDisconnectedBound);
+      this.device.addEventListener("gattserverdisconnected", this.onDisconnectedBound);
+    } catch (err) {
+      this.set("idle");
+      throw err;
+    }
+  }
+
+  async connectGatt() {
+    if (!this.device) throw new Error("未选择设备");
+    this.set("connecting");
+    try {
+      this.server = await this.device.gatt.connect();
+    } catch (err) {
+      this.set("error", this.describeError(err));
+      throw err;
+    }
+  }
+
+  async discoverServices() {
+    if (!this.server) throw new Error("未连接");
+    this.set("pairing");
+    try {
+      const service = await this.withTimeout(
+        this.server.getPrimaryService(NUS_SERVICE), PAIR_TIMEOUT_MS, "获取服务超时"
+      );
+      this.txChar = await this.withTimeout(
+        service.getCharacteristic(NUS_TX), PAIR_TIMEOUT_MS, "获取 TX 特征超时"
+      );
+      this.rxChar = await this.withTimeout(
+        service.getCharacteristic(NUS_RX), PAIR_TIMEOUT_MS, "获取 RX 特征超时"
+      );
+      await this.startNotificationsWithPairRetry(this.rxChar);
+      this.rxChar.addEventListener("characteristicvaluechanged", (e) => this.onNotify(e));
+    } catch (err) {
+      this.set("error", this.describeError(err));
+      throw err;
+    }
+    this.set("paired");
+  }
+
+  async startNotificationsWithPairRetry(char) {
+    const deadline = Date.now() + PAIR_TIMEOUT_MS;
+    let attempt = 0;
+    let delayMs = 100;
+
+    while (Date.now() < deadline) {
+      if (!this.server?.connected) throw new Error("连接已断开");
+      attempt++;
+      const remain = deadline - Date.now();
+      try {
+        this.cb.onLog?.("INFO", `startNotifications #${attempt}，delay=${delayMs}ms，remain=${remain}ms`);
+        await this.withTimeout(
+          char.startNotifications(),
+          Math.min(remain, 10000),
+          "startNotifications 单次超时"
+        );
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "SecurityError") {
+          throw new Error("配对被取消或拒绝，请在系统弹窗中确认配对");
+        }
+        const retriable =
+          (err instanceof DOMException && err.name === "NetworkError") ||
+          (err instanceof Error && err.message.includes("单次超时"));
+        if (!retriable) throw err;
+        this.cb.onLog?.("INFO", `startNotifications #${attempt} 失败，${delayMs}ms 后重试`);
+        await new Promise((r) => setTimeout(r, delayMs));
+        delayMs = Math.min(delayMs * 2, 5000);
+      }
+    }
+    throw new Error("配对超时，请检查设备是否在配对模式并重新尝试");
+  }
+
+  async disconnect() {
+    try {
+      this.device?.gatt?.disconnect();
+    } finally {
+      this.cleanup();
+      this.set("disconnected");
+    }
+  }
+
+  async forgetDevice() {
+    if (this.device && "forget" in this.device) {
+      await this.device.forget();
+    } else {
+      this.cb.onLog?.("WARN", "当前浏览器不支持 forget()，请前往系统蓝牙设置删除该设备");
+    }
+  }
+
+  async send(data) {
+    if (!this.txChar) throw new Error("未连接");
+    const bytes = typeof data === "string" ? this.encoder.encode(data) : data;
+    try {
+      if (this.txChar.writeValueWithoutResponse) {
+        await this.txChar.writeValueWithoutResponse(bytes);
+      } else {
+        await this.txChar.writeValue(bytes);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "NotSupportedError" && this.txChar.writeValue) {
+        await this.txChar.writeValue(bytes);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  onNotify(e) {
+    const value = e.target.value;
+    if (!value) return;
+    const text = this.decoder.decode(value);
+    this.cb.onData?.(text);
+    this.rxBuf += text;
+    let idx;
+    while ((idx = this.rxBuf.indexOf("\n")) >= 0) {
+      const line = this.rxBuf.slice(0, idx).trim();
+      this.rxBuf = this.rxBuf.slice(idx + 1);
+      if (line) this.cb.onLine?.(line);
+    }
+  }
+
+  onDisconnected() {
+    if (this.status === "disconnected") return;
+    const wasPairing = this.status === "pairing";
+    this.cleanup();
+    if (wasPairing) {
+      this.set(
+        "error",
+        "配对过程中设备断开。请确认：1) ESP32 UART 是否打印了 6 位 passkey；" +
+        "2) Windows 是否弹出输入框；3) 先在系统蓝牙设置中手动配对设备。"
+      );
+    } else {
+      this.set("disconnected");
+    }
+  }
+
+  hostConnected() {}
+  hostDisconnected() { void this.disconnect(); }
+}
+
+// ---------- UI 组件 ----------
+
+const STATUS_LABEL = {
+  idle: "空闲",
+  selecting: "选择设备中",
+  connecting: "连接中",
+  pairing: "配对中",
+  paired: "已配对",
+  disconnected: "已断开",
+  error: "错误",
+};
+
+const STATUS_COLOR = {
+  idle: "#6b7280",
+  selecting: "#3b82f6",
+  connecting: "#3b82f6",
+  pairing: "#f59e0b",
+  paired: "#10b981",
+  disconnected: "#6b7280",
+  error: "#ef4444",
+};
+
+class BleTest extends LitElement {
+  static properties = {
+    sendText: { state: true },
+  };
+
+  static styles = css`
+    :host {
+      display: block;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 4px;
+    }
+    .sub {
+      color: #9aa4b2;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: #1a1d23;
+      border: 1px solid #2a2f37;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-text {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .device-name {
+      color: #9aa4b2;
+      font-size: 13px;
+      margin-left: auto;
+    }
+    .error {
+      color: #fca5a5;
+      font-size: 13px;
+      margin-top: 8px;
+      padding: 10px;
+      background: rgba(239, 68, 68, 0.08);
+      border-left: 3px solid #ef4444;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+    .pair-hint {
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(245, 158, 11, 0.08);
+      border-left: 3px solid #f59e0b;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .pair-hint strong {
+      color: #fbbf24;
+    }
+    button {
+      background: #2a2f37;
+      color: #e6e6e6;
+      border: 1px solid #3a4048;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover:not(:disabled) {
+      background: #363c45;
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    button.primary {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+    button.primary:hover:not(:disabled) {
+      background: #1d4ed8;
+    }
+    button.danger {
+      background: #7f1d1d;
+      border-color: #991b1b;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .send-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    input[type="text"] {
+      flex: 1;
+      background: #0f1115;
+      border: 1px solid #2a2f37;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #e6e6e6;
+      font-size: 13px;
+      font-family: ui-monospace, monospace;
+    }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #2563eb;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .log-title {
+      font-size: 13px;
+      color: #9aa4b2;
+      font-weight: 600;
+    }
+    .log {
+      background: #0a0c10;
+      border-radius: 6px;
+      padding: 12px;
+      max-height: 360px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .log-entry {
+      display: flex;
+      gap: 8px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-time {
+      color: #4b5563;
+      flex-shrink: 0;
+    }
+    .log-type {
+      flex-shrink: 0;
+      width: 56px;
+      text-align: right;
+    }
+    .log-type.INFO { color: #60a5fa; }
+    .log-type.RX { color: #34d399; }
+    .log-type.TX { color: #fbbf24; }
+    .log-type.STATUS { color: #a78bfa; }
+    .log-type.ERROR { color: #f87171; }
+    .log-type.WARN { color: #fb923c; }
+    .log-text {
+      color: #d1d5db;
+    }
+    .empty-log {
+      color: #4b5563;
+      text-align: center;
+      padding: 20px 0;
+    }
+  `;
+
+  constructor() {
+    super();
+    this.sendText = "hello\n";
+    this.logs = [];
+
+    this.ble = new BleController(this, {
+      onLine: (line) => this.addLog("RX", line),
+      onData: () => {},
+      onStatus: (status, error) => {
+        this.addLog("STATUS", `${status}${error ? " — " + error : ""}`);
+      },
+      onLog: (type, msg) => this.addLog(type, msg),
+    });
+  }
+
+  addLog(type, text) {
+    this.logs = [...this.logs, {
+      time: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+      type,
+      text,
+    }].slice(-200);
+    this.requestUpdate();
+    this.updateComplete.then(() => {
+      const el = this.renderRoot.querySelector(".log");
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }
+
+  clearLogs() {
+    this.logs = [];
+  }
+
+  async handleConnect() {
+    try {
+      this.addLog("INFO", "开始连接流程");
+      await this.ble.pickDevice("BleUart");
+      this.addLog("INFO", `已选择设备：${this.ble.device?.name || "未知"}`);
+      await this.ble.connectGatt();
+      this.addLog("INFO", "GATT 连接成功，开始服务发现（可能触发配对）");
+      await this.ble.discoverServices();
+      this.addLog("INFO", "服务发现完成，已配对");
+    } catch (err) {
+      this.addLog("ERROR", err.message || String(err));
+    }
+  }
+
+  async handleDisconnect() {
+    await this.ble.disconnect();
+  }
+
+  async handleForget() {
+    try {
+      await this.ble.forgetDevice();
+      this.addLog("INFO", "已请求忘记设备");
+    } catch (err) {
+      this.addLog("ERROR", err.message || String(err));
+    }
+  }
+
+  async handleSend() {
+    try {
+      const text = this.sendText;
+      if (!text) return;
+      await this.ble.send(text);
+      this.addLog("TX", text.replace(/\n/g, "\\n"));
+    } catch (err) {
+      this.addLog("ERROR", err.message || String(err));
+    }
+  }
+
+  render() {
+    const status = this.ble.status;
+    const color = STATUS_COLOR[status] || "#6b7280";
+    const label = STATUS_LABEL[status] || status;
+    const deviceName = this.ble.device?.name;
+    const busy = ["selecting", "connecting", "pairing"].includes(status);
+    const canSend = status === "paired";
+
+    return html`
+      <h1>BLE 配对测试</h1>
+      <div class="sub">
+        用于测试 Web Bluetooth 与 ESP32 BLE UART 的配对流程。请使用 Chrome / Edge，
+        并在 localhost 或 HTTPS 下运行。
+      </div>
+
+      <div class="card">
+        <div class="status-row">
+          <div class="dot" style="background:${color}"></div>
+          <div class="status-text" style="color:${color}">${label}</div>
+          ${deviceName ? html`<div class="device-name">${deviceName}</div>` : ""}
+        </div>
+
+        ${status === "pairing" ? html`
+          <div class="pair-hint">
+            <strong>配对进行中。</strong><br />
+            请查看 ESP32 串口 monitor 输出的 <strong>6 位 passkey</strong>，
+            并在系统弹出的蓝牙配对窗口中输入。<br />
+            如果系统没有弹窗，或连接很快断开，请先在
+            <strong>Windows 设置 → 蓝牙和其他设备</strong> 中手动删除该设备，
+            再重新连接；也可以先在那里手动完成一次配对。
+          </div>
+        ` : ""}
+
+        ${this.ble.errorMessage ? html`
+          <div class="error">${this.ble.errorMessage}</div>
+        ` : ""}
+
+        <div class="actions" style="margin-top:12px">
+          <button class="primary" ?disabled=${busy} @click=${this.handleConnect}>
+            连接设备
+          </button>
+          <button ?disabled=${status === "idle" || status === "disconnected"} @click=${this.handleDisconnect}>
+            断开
+          </button>
+          <button class="danger" ?disabled=${!this.ble.device} @click=${this.handleForget}>
+            忘记设备
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="log-title" style="margin-bottom:8px">发送数据（ESP32 会 echo 回来）</div>
+        <div class="send-row">
+          <input
+            type="text"
+            .value=${this.sendText}
+            @input=${(e) => (this.sendText = e.target.value)}
+            @keydown=${(e) => { if (e.key === "Enter") this.handleSend(); }}
+            placeholder="输入要发送的文本，例如 hello"
+          />
+          <button class="primary" ?disabled=${!canSend} @click=${this.handleSend}>发送</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="log-header">
+          <div class="log-title">日志</div>
+          <button @click=${this.clearLogs}>清空</button>
+        </div>
+        <div class="log">
+          ${this.logs.length === 0 ? html`<div class="empty-log">暂无日志</div>` : ""}
+          ${this.logs.map((e) => html`
+            <div class="log-entry">
+              <span class="log-time">${e.time}</span>
+              <span class="log-type ${e.type}">${e.type}</span>
+              <span class="log-text">${e.text}</span>
+            </div>
+          `)}
+        </div>
+      </div>
+    `;
+  }
+}
+
+customElements.define("ble-test", BleTest);
+</script>
+</body>
 </html>

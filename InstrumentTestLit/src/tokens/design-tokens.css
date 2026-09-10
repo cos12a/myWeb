@@ -1,0 +1,20 @@
+/* ===== 设计令牌（Design Tokens） =====
+ * 全局 CSS 变量，组件通过 var() 消费，主题切换只需覆盖这些变量。
+ * Linear Aesthetic 方向：深色玻璃拟态 + 蓝绿渐变 + 等宽数值。
+ */
+:root {
+  --it-bg: #07090f;
+  --it-surface: rgba(20, 27, 45, .72);
+  --it-surface-2: rgba(29, 39, 64, .6);
+  --it-border: rgba(255, 255, 255, .07);
+  --it-border-strong: rgba(255, 255, 255, .14);
+  --it-text: #eaf1ff;
+  --it-muted: #7d8aa6;
+  --it-accent: #5b9cff;
+  --it-accent-2: #34d399;
+  --it-grad: linear-gradient(135deg, #6aa6ff, #34d399);
+  --it-radius: 16px;
+  --it-mono: "SF Mono", "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
+  --it-danger: #ff6b6b;
+  --it-warn: #ff8a5b;
+}
