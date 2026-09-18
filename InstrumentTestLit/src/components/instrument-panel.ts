@@ -48,6 +48,22 @@ export class InstrumentPanel extends LitElement {
 
   static styles = css`
     :host { display: block; }
+    .conn-group {
+      display: grid; grid-template-columns: 1fr 1fr auto;
+      padding: 11px 16px; margin-bottom: 16px;
+      background: var(--it-surface); border: 1px solid var(--it-border);
+      border-radius: var(--it-radius);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    }
+    .conn-cell { min-width: 0; }
+    .conn-cell + .conn-cell { border-left: 1px solid var(--it-border); padding-left: 16px; }
+    .conn-cell:not(:last-child) { padding-right: 16px; }
+    .data-cell { display: flex; align-items: center; justify-content: center; }
+    @media (max-width: 560px) {
+      .conn-group { grid-template-columns: 1fr; gap: 10px; }
+      .conn-cell + .conn-cell { border-left: none; padding-left: 0; border-top: 1px solid var(--it-border); padding-top: 10px; }
+      .conn-cell:not(:last-child) { padding-right: 0; }
+    }
     .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
     .intro { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(7, 9, 15, .78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10; padding: 20px; }
     .intro-card { text-align: center; padding: 34px 28px; background: var(--it-surface); border: 1px solid var(--it-border-strong); border-radius: 20px; max-width: 340px; width: 100%; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 30px 70px rgba(0, 0, 0, .5); }
@@ -148,13 +164,21 @@ export class InstrumentPanel extends LitElement {
     const serialText = statusText(this.serial.status, this.serialLastManual, this.serial.errorMessage);
     return html`
       <pair-hint .open=${this.pairHintKey !== null} .key=${this.pairHintKey ?? ""} @close=${this.onPairHintClose}></pair-hint>
-      <conn-bar label="蓝牙" .statusText=${bleText} .dotOn=${this.ble.status === "paired"}
-                 .connectDisabled=${BUSY.has(this.ble.status)} .disconnectDisabled=${!this.ble.connected}
-                 @connect=${this.bleConnect} @disconnect=${this.bleDisconnect}></conn-bar>
-      <conn-bar label="串口" .statusText=${serialText} .dotOn=${this.serial.connected}
-                 .connectDisabled=${BUSY.has(this.serial.status)} .disconnectDisabled=${!this.serial.connected}
-                 @connect=${this.serialConnect} @disconnect=${this.serialDisconnect}></conn-bar>
-      <data-stream-bar .active=${this.dataStream.active} .lastAt=${this.dataStream.lastAt}></data-stream-bar>
+      <div class="conn-group" part="conn-group">
+        <div class="conn-cell">
+          <conn-bar icon="📶" label="蓝牙" .statusText=${bleText} .dotOn=${this.ble.status === "paired"}
+                     .connectDisabled=${BUSY.has(this.ble.status)} .disconnectDisabled=${!this.ble.connected}
+                     @connect=${this.bleConnect} @disconnect=${this.bleDisconnect}></conn-bar>
+        </div>
+        <div class="conn-cell">
+          <conn-bar icon="🔌" label="串口" .statusText=${serialText} .dotOn=${this.serial.connected}
+                     .connectDisabled=${BUSY.has(this.serial.status)} .disconnectDisabled=${!this.serial.connected}
+                     @connect=${this.serialConnect} @disconnect=${this.serialDisconnect}></conn-bar>
+        </div>
+        <div class="conn-cell data-cell" part="data-cell">
+          <data-stream-bar .active=${this.dataStream.active}></data-stream-bar>
+        </div>
+      </div>
       <div class="metrics">
         ${this.metrics.map((m) => html`<metric-card .label=${m.label} .unit=${m.unit}
           .value=${this.values[m.key] ?? null} .precision=${m.precision}></metric-card>`)}

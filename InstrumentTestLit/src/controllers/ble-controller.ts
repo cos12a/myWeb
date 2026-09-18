@@ -1,7 +1,7 @@
 /** BLE 通信 Controller —— 副作用集中地：Web Bluetooth + NUS 透传 + 行分包。
- *  流程：pickDevice → connectGatt(GATT 连接) → discoverServices(访问受保护特征时 OS 隐式触发 SMP 配对)。
- *  配对不是 gatt.connect() 触发的，而是访问需要加密的特征值（startNotifications 等）时由 OS 触发。
- *  UI 是 Lit 类，逻辑是纯函数，副作用进 Controller。 */
+ *  流程：pickDevice → connectGatt(GATT 连接) → discoverServices(轮询重试等待系统配对完成)。
+ *  配对由访问受保护特征（startNotifications）时 OS 隐式触发，可能反复 NetworkError，
+ *  因此 discoverServices 用 120s 窗口 + 6s 间隔耐心轮询，等用户在系统弹窗输完 Key。 */
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import type { ConnStatus } from "../core/types.js";
 
@@ -9,7 +9,9 @@ export const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 export const NUS_TX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 export const NUS_RX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 
-const PAIR_TIMEOUT_MS = 30000;
+const PAIR_WAIT_TOTAL_MS = 120000;     // 等待完成系统配对的最长时间（120s）
+const PAIR_POLL_INTERVAL_MS = 6000;    // 配对未完成时的重试间隔（6s）
+const PAIR_ATTEMPT_TIMEOUT_MS = 30000; // 单次尝试超时（30s）
 
 export interface BleCallbacks {
   onLine?: (line: string) => void;
@@ -28,6 +30,7 @@ export class BleController implements ReactiveController {
   private decoder = new TextDecoder();
   private encoder = new TextEncoder();
   private onDisconnectedBound = (): void => this.onDisconnected();
+  private aborting = false;
 
   status: ConnStatus = "idle";
   errorMessage: string | null = null;
@@ -83,6 +86,7 @@ export class BleController implements ReactiveController {
     if (!navigator.bluetooth) {
       throw new Error("当前浏览器不支持 Web Bluetooth，请使用 Chrome / Edge / Android Chrome");
     }
+    this.aborting = false;
     this.set("selecting");
     const reqOpts: RequestDeviceOptions = { optionalServices: [NUS_SERVICE] };
     if (namePrefix) reqOpts.filters = [{ namePrefix }];
@@ -100,55 +104,87 @@ export class BleController implements ReactiveController {
   async connectGatt(): Promise<void> {
     if (!this.device) throw new Error("未选择设备");
     this.set("connecting");
-    console.log("[BLE] connectGatt: 延时 1 秒等待信道稳定");
-    await new Promise(r => setTimeout(r, 1000));
-    console.log("[BLE] connectGatt: 调用 gatt.connect()");
+    await new Promise(r => setTimeout(r, 200));
     try {
-      this.server = await this.device.gatt.connect();
-      console.log("[BLE] connectGatt: resolve，connected=", this.device.gatt?.connected);
+      this.server = await this.withTimeout(
+        this.device.gatt.connect(),
+        PAIR_ATTEMPT_TIMEOUT_MS,
+        "GATT 连接超时",
+      );
     } catch (err) {
-      console.log("[BLE] connectGatt: 抛错", err);
       this.set("error", this.describeError(err));
       throw err;
     }
-    // GATT 已连接，配对在 discoverServices 访问受保护特征时由 OS 隐式触发
   }
 
+  /** 发现服务并订阅通知 —— 按 ble-key.html 的 establishSession 耐心轮询：
+   *  startNotifications 会触发系统配对弹窗，期间可能反复 NetworkError / 链路抖动，
+   *  这里用 120s 总窗口 + 6s 间隔重试，等用户在系统弹窗输完 Key 后某次尝试即成功。 */
   async discoverServices(): Promise<void> {
-    if (!this.server) throw new Error("未连接");
+    if (!this.device) throw new Error("未选择设备");
     this.set("pairing");
-    console.log("[BLE] discoverServices: 开始，server.connected=", this.server.connected);
-    try {
-      const service = await this.withTimeout(
-        this.server.getPrimaryService(NUS_SERVICE), PAIR_TIMEOUT_MS, "获取服务超时",
-      );
-      console.log("[BLE] discoverServices: 拿到 service");
-      this.txChar = await this.withTimeout(
-        service.getCharacteristic(NUS_TX), PAIR_TIMEOUT_MS, "获取 TX 特征超时",
-      );
-      this.rxChar = await this.withTimeout(
-        service.getCharacteristic(NUS_RX), PAIR_TIMEOUT_MS, "获取 RX 特征超时",
-      );
-      console.log("[BLE] discoverServices: 拿到 txChar/rxChar，准备 startNotifications");
-      await this.withTimeout(
-        this.rxChar.startNotifications(),
-        PAIR_TIMEOUT_MS,
-        "订阅通知超时",
-      );
-      console.log("[BLE] discoverServices: startNotifications 成功");
-      this.rxChar.addEventListener("characteristicvaluechanged", (e) => this.onNotify(e));
-    } catch (err) {
-      console.log("[BLE] discoverServices: 抛错", err);
-      this.set("error", this.describeError(err));
-      throw err;
-    }
-    this.set("paired");
-    console.log("[BLE] discoverServices: 状态置 paired");
-  }
+    const deadline = Date.now() + PAIR_WAIT_TOTAL_MS;
+    let attempt = 0;
+    while (true) {
+      if (this.aborting) throw new DOMException("用户已取消连接", "AbortError");
+      try {
+        // 1) 确保 GATT 已连接（链路断开后特征会失效，需重新获取）
+        if (!this.device.gatt.connected) {
+          this.txChar = null;
+          this.rxChar = null;
+          this.server = await this.withTimeout(
+            this.device.gatt.connect(),
+            PAIR_ATTEMPT_TIMEOUT_MS,
+            "GATT 重连超时",
+          );
+          await new Promise(r => setTimeout(r, 300));
+        } else {
+          this.server = this.device.gatt;
+        }
 
+        // 2) 获取服务与特征
+        if (!this.txChar || !this.rxChar) {
+          const service = await this.withTimeout(
+            this.server.getPrimaryService(NUS_SERVICE),
+            PAIR_ATTEMPT_TIMEOUT_MS,
+            "获取服务超时",
+          );
+          this.txChar = await this.withTimeout(
+            service.getCharacteristic(NUS_TX),
+            PAIR_ATTEMPT_TIMEOUT_MS,
+            "获取 TX 特征超时",
+          );
+          this.rxChar = await this.withTimeout(
+            service.getCharacteristic(NUS_RX),
+            PAIR_ATTEMPT_TIMEOUT_MS,
+            "获取 RX 特征超时",
+          );
+          await new Promise(r => setTimeout(r, 200));
+        }
+
+        // 3) 订阅通知（这一步会触发系统配对弹窗）
+        await this.withTimeout(
+          this.rxChar.startNotifications(),
+          PAIR_ATTEMPT_TIMEOUT_MS,
+          "订阅通知超时",
+        );
+        this.rxChar.addEventListener("characteristicvaluechanged", (e) => this.onNotify(e));
+        this.set("paired");
+        return;
+      } catch (err) {
+        if (this.aborting) throw err;
+        if (Date.now() >= deadline) {
+          this.set("error", this.describeError(err));
+          throw err;
+        }
+        attempt++;
+        await new Promise(r => setTimeout(r, PAIR_POLL_INTERVAL_MS));
+      }
+    }
+  }
 
   async disconnect(): Promise<void> {
-    console.log("[BLE] disconnect: 调用，connected=", this.connected);
+    this.aborting = true;
     try {
       this.device?.gatt?.disconnect();
     } finally {
@@ -198,16 +234,9 @@ export class BleController implements ReactiveController {
 
   private onDisconnected(): void {
     if (this.status === "disconnected") return;
-    const wasPairing = this.status === "pairing";
-    console.log(`[BLE] onDisconnected: status=${this.status}, wasPairing=${wasPairing}`);
+    // 配对中链路抖动属于正常现象，discoverServices 的轮询循环会自动重连
+    if (this.status === "pairing") return;
     this.cleanup();
-    if (wasPairing) {
-      this.set("error",
-        "配对过程中设备断开。请确认：1) ESP32 UART 是否打印了 6 位 passkey；" +
-        "2) Windows 是否弹出输入框；3) 先在系统蓝牙设置中手动配对设备。"
-      );
-    } else {
-      this.set("disconnected");
-    }
+    this.set("disconnected");
   }
 }

@@ -37,3 +37,5 @@ report.*.json
 # tool-generated indexes/caches
 .arts/
 .codegraph/
+
+webSerialPlotter/dist/

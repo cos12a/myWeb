@@ -1,0 +1,7 @@
+{
+  "name": "web-serial-plotter",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "not_found_handling": "single-page-application"
+  }
+}

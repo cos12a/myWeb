@@ -1,0 +1,1358 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WS8623 BLE蓝牙测试</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: #21262d;
+            --bg-input: #0d1117;
+            --bg-hover: #30363d;
+            --border-color: #30363d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-cyan: #00d9ff;
+            --accent-orange: #ff6b35;
+            --accent-purple: #a371f7;
+            --btn-primary: #238636;
+            --btn-primary-hover: #2ea043;
+            --spacing-xs: 3px;
+            --spacing-sm: 6px;
+            --spacing-md: 10px;
+            --spacing-lg: 16px;
+            --radius-sm: 4px;
+            --radius-md: 8px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family:
+                "Inter",
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: var(--spacing-lg);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .header h1 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            background: linear-gradient(135deg,
+                    var(--accent-blue),
+                    var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+        }
+
+        .card-title {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-md);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .card-title svg {
+            width: 13px;
+            height: 13px;
+            opacity: 0.7;
+        }
+
+        .field {
+            margin-bottom: var(--spacing-md);
+        }
+
+        .field:last-child {
+            margin-bottom: 0;
+        }
+
+        .field label {
+            display: block;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        textarea {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            padding: 8px 10px;
+            font-size: 0.85rem;
+            font-family: "JetBrains Mono", monospace;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        input:disabled,
+        textarea:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .row {
+            display: flex;
+            gap: var(--spacing-md);
+            align-items: flex-end;
+        }
+
+        .row>.field {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 620px) {
+            .row {
+                flex-wrap: wrap;
+            }
+        }
+
+        .format-toggle {
+            display: inline-flex;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+        }
+
+        .format-toggle button {
+            background: var(--bg-input);
+            border: none;
+            color: var(--text-secondary);
+            padding: 7px 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: "Inter", sans-serif;
+            transition: all 0.15s;
+        }
+
+        .format-toggle button.active {
+            background: var(--accent-blue);
+            color: #0d1117;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 16px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            font-weight: 600;
+            font-family: "Inter", sans-serif;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .btn svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        .btn-connect {
+            background: var(--accent-cyan);
+            color: #0d1117;
+        }
+
+        .btn-connect:hover:not(:disabled) {
+            filter: brightness(1.1);
+        }
+
+        .btn-disconnect {
+            background: var(--accent-red);
+            color: #fff;
+        }
+
+        .btn-disconnect:hover:not(:disabled) {
+            filter: brightness(1.1);
+        }
+
+        .btn-primary {
+            background: var(--btn-primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--btn-primary-hover);
+        }
+
+        .btn-ghost {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-ghost:hover:not(:disabled) {
+            background: var(--border-color);
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-md);
+            flex-wrap: wrap;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        .status-dot.connecting {
+            background: var(--accent-orange);
+            animation: pulse 1s infinite;
+        }
+
+        .status-dot.connected {
+            background: var(--accent-green);
+            box-shadow: 0 0 7px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        .status-text {
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-meta {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            font-family: "JetBrains Mono", monospace;
+        }
+
+        .send-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+            align-items: center;
+            margin-top: var(--spacing-sm);
+        }
+
+        .rate-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: var(--spacing-sm);
+        }
+
+        .rate-stat {
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 9px;
+        }
+
+        .rate-stat-label {
+            color: var(--text-muted);
+            font-size: 0.65rem;
+            margin-bottom: 4px;
+        }
+
+        .rate-stat-value {
+            color: var(--accent-cyan);
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+
+        .test-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+            align-items: center;
+            margin-top: var(--spacing-md);
+        }
+
+        .test-progress {
+            color: var(--text-secondary);
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.72rem;
+        }
+
+        .capability-note {
+            color: var(--text-muted);
+            font-size: 0.65rem;
+            line-height: 1.5;
+            margin-top: var(--spacing-md);
+        }
+
+        .signal-controls {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 1fr auto;
+            gap: var(--spacing-md);
+            align-items: end;
+        }
+
+        .signal-controls .field {
+            margin-bottom: 0;
+        }
+
+        select,
+        input[type="number"] {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            padding: 8px 10px;
+            font-size: 0.8rem;
+        }
+
+        select:focus,
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        select:disabled,
+        input[type="number"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .checkbox {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox input {
+            accent-color: var(--accent-blue);
+            cursor: pointer;
+        }
+
+        .log {
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: var(--spacing-sm) var(--spacing-md);
+            height: 340px;
+            overflow-y: auto;
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.74rem;
+            line-height: 1.6;
+        }
+
+        .log::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        .log::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 8px;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+            word-break: break-all;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .log-tag {
+            flex-shrink: 0;
+            font-weight: 600;
+            width: 62px;
+        }
+
+        .log-msg {
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .tag-recv .log-msg {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tag-info .log-tag {
+            color: var(--accent-blue);
+        }
+
+        .tag-send .log-tag {
+            color: var(--accent-orange);
+        }
+
+        .tag-send .log-msg {
+            color: var(--accent-orange);
+        }
+
+        .tag-recv .log-tag {
+            color: var(--accent-green);
+        }
+
+        .tag-recv .log-msg {
+            color: var(--accent-green);
+        }
+
+        .tag-error .log-tag {
+            color: var(--accent-red);
+        }
+
+        .tag-error .log-msg {
+            color: var(--accent-red);
+        }
+
+        .log-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--spacing-md);
+        }
+
+        .uuid-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.68rem;
+            color: var(--text-secondary);
+        }
+
+        .uuid-list div span:first-child {
+            color: var(--accent-cyan);
+            display: inline-block;
+            width: 68px;
+        }
+
+        @media (max-width: 620px) {
+            .send-actions {
+                flex-wrap: wrap;
+            }
+
+            .signal-controls,
+            .rate-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>WS8623 BLE蓝牙模块测试</h1>
+        <p>基于 Web Bluetooth API · BLE UART Service</p>
+    </div>
+
+    <div class="container">
+        <!-- 连接配置 -->
+        <div class="card">
+            <div class="row" style="margin-top: var(--spacing-md)">
+                <div class="field" style="margin-bottom: 0; flex: 0 0 auto">
+                    <label>连接 / 断开</label>
+                    <button class="btn btn-connect" id="connectBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6.5 6.5L17.5 17.5M6.5 17.5L17.5 6.5" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <span id="connectBtnText">扫描并连接</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态 -->
+        <div class="card">
+            <div class="status-bar">
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span class="status-text" id="statusText">未连接</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                    <span class="status-meta" id="deviceMeta">-</span>
+                </div>
+            </div>
+        </div>
+        <!-- 发送数据 -->
+        <div class="card">
+            <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                </svg>
+                发送数据
+            </div>
+            <div class="field">
+                <textarea id="sendInput" rows="3" placeholder="输入要发送的数据..." disabled></textarea>
+            </div>
+            <div class="send-actions">
+                <div class="format-toggle" id="sendFormatToggle">
+                    <button type="button" data-format="text" class="active">
+                        文本 (UTF-8)
+                    </button>
+                    <button type="button" data-format="hex">HEX</button>
+                </div>
+                <label class="checkbox">
+                    <input type="checkbox" id="autoNewline" />
+                    末尾加换行
+                </label>
+                <div style="flex: 1"></div>
+                <button class="btn btn-primary" id="sendBtn" disabled>发送</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">速率测试结果</div>
+            <div class="rate-grid">
+                <div class="rate-stat">
+                    <div class="rate-stat-label">TX 无响应写：写入速率</div>
+                    <div class="rate-stat-value" id="writeNoResponseRate">-</div>
+                </div>
+                <div class="rate-stat">
+                    <div class="rate-stat-label">TX 响应写：成功速率</div>
+                    <div class="rate-stat-value" id="writeResponseRate">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">速率测试</div>
+            <div class="test-actions">
+                <button class="btn btn-primary" id="startRateTestBtn" disabled>
+                    开始速率测试
+                </button>
+                <button class="btn btn-ghost" id="stopRateTestBtn" disabled>
+                    停止测试
+                </button>
+                <span class="test-progress" id="testProgress">未开始</span>
+            </div>
+            <div class="capability-note">
+                适合验证 TX 特征的实际写入吞吐；默认 FFF0，默认过滤设备名 WS。
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">波形输出</div>
+            <div class="signal-controls">
+                <div class="field">
+                    <label for="signalType">信号类型</label>
+                    <select id="signalType" disabled>
+                        <option value="random">随机数</option>
+                        <option value="square">方波</option>
+                        <option value="sine">正弦波</option>
+                        <option value="triangle">三角波</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="signalInterval">输出间隔（ms）</label>
+                    <input type="number" id="signalInterval" min="10" max="60000" value="100" disabled />
+                </div>
+                <div class="field">
+                    <label for="signalAmplitude">幅值</label>
+                    <input type="number" id="signalAmplitude" min="1" max="1000000" value="100" disabled />
+                </div>
+                <button class="btn btn-primary" id="signalOutputBtn" disabled>
+                    开始输出
+                </button>
+            </div>
+            <div class="capability-note" id="signalOutputStatus">
+                选择信号类型后，点击开始输出；再次点击停止。
+            </div>
+        </div>
+
+        <!-- 日志 -->
+        <div class="card">
+            <div class="log-head">
+                <div class="card-title" style="margin-bottom: 0">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16v16H4z M4 9h16 M9 4v16" />
+                    </svg>
+                    通信日志
+                </div>
+                <div style="display: flex; gap: 6px">
+                    <label class="checkbox">
+                        <input type="checkbox" id="autoScroll" checked />
+                        自动滚动
+                    </label>
+                    <button class="btn btn-ghost" id="clearLogBtn" style="padding: 4px 10px; font-size: 0.7rem">
+                        清空
+                    </button>
+                </div>
+            </div>
+            <div class="log" id="logBox"></div>
+        </div>
+    </div>
+
+    <script>
+        const SERVICE_PROFILES = {
+            fff0: {
+                name: "串口服务 FFF0",
+                service: "0000fff0-0000-1000-8000-00805f9b34fb",
+                tx: "0000fff2-0000-1000-8000-00805f9b34fb",
+                rx: "0000fff1-0000-1000-8000-00805f9b34fb",
+            },
+        };
+        let selectedServiceProfile = SERVICE_PROFILES.fff0;
+
+        const DEFAULT_PACKET_SIZE = 244;
+        const WRITE_CHUNK_SIZE = 244;
+
+        let bleDevice = null;
+        let bleServer = null;
+        let txCharacteristic = null;
+        let rxCharacteristic = null;
+        let isConnected = false;
+        let phase = "idle";
+        let userRequestedDisconnect = false;
+
+        const connectBtn = document.getElementById("connectBtn");
+        const connectBtnText = document.getElementById("connectBtnText");
+        const statusDot = document.getElementById("statusDot");
+        const statusText = document.getElementById("statusText");
+        const deviceMeta = document.getElementById("deviceMeta");
+        const sendInput = document.getElementById("sendInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const autoNewline = document.getElementById("autoNewline");
+        const autoScroll = document.getElementById("autoScroll");
+        const logBox = document.getElementById("logBox");
+        const clearLogBtn = document.getElementById("clearLogBtn");
+        const startRateTestBtn = document.getElementById("startRateTestBtn");
+        const stopRateTestBtn = document.getElementById("stopRateTestBtn");
+        const testProgress = document.getElementById("testProgress");
+        const writeNoResponseRate = document.getElementById(
+            "writeNoResponseRate",
+        );
+        const writeResponseRate = document.getElementById("writeResponseRate");
+        const signalType = document.getElementById("signalType");
+        const signalInterval = document.getElementById("signalInterval");
+        const signalAmplitude = document.getElementById("signalAmplitude");
+        const signalOutputBtn = document.getElementById("signalOutputBtn");
+        const signalOutputStatus = document.getElementById("signalOutputStatus");
+
+        let sendFormat = "text";
+        let rateTestRunning = false;
+        let stopRateTestRequested = false;
+        let signalOutputRunning = false;
+        let signalOutputToken = 0;
+        let signalSampleIndex = 0;
+
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+        function bindFormatToggle(containerId, onChange) {
+            const container = document.getElementById(containerId);
+            container.querySelectorAll("button").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    container
+                        .querySelectorAll("button")
+                        .forEach((b) => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    onChange(btn.dataset.format);
+                });
+            });
+        }
+        bindFormatToggle("sendFormatToggle", (f) => (sendFormat = f));
+
+        function textToBytes(str) {
+            return new TextEncoder().encode(str);
+        }
+
+        function hexToBytes(hex) {
+            const clean = hex.replace(/0x/gi, "").replace(/[\s\-:,]/g, "");
+            if (clean.length % 2 !== 0) {
+                throw new Error("HEX 长度必须为偶数");
+            }
+            if (!/^[0-9a-fA-F]*$/.test(clean)) {
+                throw new Error("HEX 含有非法字符");
+            }
+            const bytes = new Uint8Array(clean.length / 2);
+            for (let i = 0; i < bytes.length; i++) {
+                bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
+            }
+            return bytes;
+        }
+
+        function toBytes(str, format) {
+            if (format === "hex") return hexToBytes(str);
+            return textToBytes(str);
+        }
+
+        function bytesToHex(bytes) {
+            return Array.from(bytes)
+                .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+                .join(" ");
+        }
+
+        const TAG_TEXT = {
+            info: "INFO",
+            send: "发送",
+            recv: "接收",
+            error: "错误",
+        };
+
+        function addLog(type, message) {
+            const entry = document.createElement("div");
+            entry.className = `log-entry tag-${type}`;
+
+            const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+            const timeSpan = document.createElement("span");
+            timeSpan.className = "log-time";
+            timeSpan.textContent = time;
+
+            const tagSpan = document.createElement("span");
+            tagSpan.className = "log-tag";
+            tagSpan.textContent = TAG_TEXT[type] || type;
+
+            const msgSpan = document.createElement("span");
+            msgSpan.className = "log-msg";
+            msgSpan.textContent = message;
+
+            entry.appendChild(timeSpan);
+            entry.appendChild(tagSpan);
+            entry.appendChild(msgSpan);
+            logBox.appendChild(entry);
+
+            if (autoScroll.checked) {
+                logBox.scrollTop = logBox.scrollHeight;
+            }
+        }
+
+        clearLogBtn.addEventListener("click", () => {
+            logBox.innerHTML = "";
+        });
+
+        function updateUI() {
+            const connected = isConnected;
+            const connecting = phase === "connecting" && !connected;
+            connectBtn.className =
+                connected || connecting ? "btn btn-disconnect" : "btn btn-connect";
+            connectBtnText.textContent = connected
+                ? "断开连接"
+                : connecting
+                    ? "取消连接"
+                    : "扫描并连接";
+            connectBtn.disabled = false;
+
+            sendInput.disabled = !connected;
+            sendBtn.disabled = !connected;
+            startRateTestBtn.disabled = !connected || rateTestRunning;
+            stopRateTestBtn.disabled = !rateTestRunning;
+            signalType.disabled =
+                !connected || rateTestRunning || signalOutputRunning;
+            signalInterval.disabled =
+                !connected || rateTestRunning || signalOutputRunning;
+            signalAmplitude.disabled =
+                !connected || rateTestRunning || signalOutputRunning;
+            signalOutputBtn.disabled = !connected || rateTestRunning;
+            signalOutputBtn.textContent = signalOutputRunning
+                ? "停止输出"
+                : "开始输出";
+        }
+
+        function setStatus(state, text) {
+            statusDot.className = "status-dot" + (state ? " " + state : "");
+            statusText.textContent = text;
+        }
+
+        function formatRate(bytes, elapsedMs) {
+            if (!elapsedMs || bytes <= 0) return "未收到数据";
+            const bytesPerSecond = (bytes * 1000) / elapsedMs;
+            if (bytesPerSecond >= 1024 * 1024)
+                return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MiB/s`;
+            if (bytesPerSecond >= 1024)
+                return `${(bytesPerSecond / 1024).toFixed(2)} KiB/s`;
+            return `${bytesPerSecond.toFixed(0)} B/s`;
+        }
+
+        function getWriteChunkSize() {
+            const maxWrite = Number(txCharacteristic?.maxWriteValueLength);
+            if (Number.isFinite(maxWrite) && maxWrite > 0) {
+                return Math.min(DEFAULT_PACKET_SIZE, maxWrite);
+            }
+            return DEFAULT_PACKET_SIZE;
+        }
+
+        function finishRateTest(label, bytes, startedAt, output) {
+            const elapsedMs = Math.max(1, performance.now() - startedAt);
+            const rate = formatRate(bytes, elapsedMs);
+            output.textContent = rate;
+            addLog(
+                "info",
+                `${label}: ${rate}（${bytes} 字节 / ${(elapsedMs / 1000).toFixed(2)} 秒）`,
+            );
+            return rate;
+        }
+
+        async function runWriteTest(durationMs, withResponse, payload) {
+            const startedAt = performance.now();
+            const deadline = startedAt + durationMs;
+            let bytes = 0;
+            let activePayload = payload;
+            let fallbackLogged = false;
+            const label = withResponse ? "TX 响应写成功速率" : "TX 无响应写入速率";
+            testProgress.textContent = `${label}...`;
+            while (performance.now() < deadline && !stopRateTestRequested) {
+                try {
+                    if (withResponse) {
+                        await txCharacteristic.writeValueWithResponse(activePayload);
+                    } else {
+                        await txCharacteristic.writeValueWithoutResponse(activePayload);
+                    }
+                    bytes += activePayload.byteLength;
+                } catch (error) {
+                    if (activePayload.byteLength > WRITE_CHUNK_SIZE) {
+                        activePayload = activePayload.slice(0, WRITE_CHUNK_SIZE);
+                        if (!fallbackLogged) {
+                            addLog(
+                                "info",
+                                `${label}不接受 ${payload.byteLength} B，已降级为 ${WRITE_CHUNK_SIZE} B 分包`,
+                            );
+                            fallbackLogged = true;
+                        }
+                        continue;
+                    }
+                    addLog("error", `${label}失败: ${error.message}`);
+                    break;
+                }
+            }
+            return finishRateTest(
+                label,
+                bytes,
+                startedAt,
+                withResponse ? writeResponseRate : writeNoResponseRate,
+            );
+        }
+
+        function generateSignalSample(type, amplitude, index) {
+            const phase = index / 20;
+            if (type === "random")
+                return `${(Math.random() * 2 - 1) * amplitude}\n`;
+            if (type === "square")
+                return `${index % 2 === 0 ? amplitude : -amplitude}\n`;
+            if (type === "sine") return `${Math.sin(phase) * amplitude}\n`;
+            if (type === "triangle") {
+                const normalized =
+                    2 *
+                    Math.abs(
+                        2 *
+                        (phase / (2 * Math.PI) -
+                            Math.floor(phase / (2 * Math.PI) + 0.5)),
+                    ) -
+                    1;
+                return `${normalized * amplitude}\n`;
+            }
+            return "0\n";
+        }
+
+        function stopSignalOutput(message = "信号输出已停止") {
+            if (!signalOutputRunning) return;
+            signalOutputRunning = false;
+            signalOutputToken++;
+            signalOutputStatus.textContent = message;
+            updateUI();
+            addLog("info", message);
+        }
+
+        async function runSignalOutput() {
+            if (
+                !isConnected ||
+                !txCharacteristic ||
+                !txCharacteristic.properties.writeWithoutResponse
+            ) {
+                signalOutputStatus.textContent = "TX 不支持无响应写，无法输出";
+                addLog("error", "信号输出失败：TX 不支持 writeWithoutResponse");
+                return;
+            }
+
+            signalOutputRunning = true;
+            const token = ++signalOutputToken;
+            signalSampleIndex = 0;
+            const type = signalType.value;
+            const intervalMs = Math.min(
+                60000,
+                Math.max(10, Number(signalInterval.value) || 100),
+            );
+            const amplitude = Math.min(
+                1000000,
+                Math.max(1, Number(signalAmplitude.value) || 100),
+            );
+            signalOutputStatus.textContent = `正在输出 ${signalType.options[signalType.selectedIndex].text}，间隔 ${intervalMs} ms`;
+            updateUI();
+            addLog(
+                "info",
+                `开始信号输出: ${signalType.options[signalType.selectedIndex].text}`,
+            );
+
+            while (
+                signalOutputRunning &&
+                token === signalOutputToken &&
+                isConnected
+            ) {
+                const data = new TextEncoder().encode(
+                    generateSignalSample(type, amplitude, signalSampleIndex++),
+                );
+                try {
+                    await txCharacteristic.writeValueWithoutResponse(data);
+                } catch (error) {
+                    stopSignalOutput("信号输出失败: " + error.message);
+                    return;
+                }
+                await sleep(intervalMs);
+            }
+        }
+
+        function toggleSignalOutput() {
+            if (signalOutputRunning) {
+                stopSignalOutput();
+            } else {
+                runSignalOutput();
+            }
+        }
+
+        async function runRateTests() {
+            if (!isConnected || !txCharacteristic) return;
+            rateTestRunning = true;
+            stopRateTestRequested = false;
+            writeNoResponseRate.textContent = "-";
+            writeResponseRate.textContent = "-";
+            updateUI();
+            try {
+                const seconds = 10;
+                const payloadSize = getWriteChunkSize();
+                const payload = new Uint8Array(payloadSize);
+                payload.fill(0x55);
+                addLog(
+                    "info",
+                    `开始速率测试，每项 ${seconds}s，单包 ${payloadSize} B`,
+                );
+
+                if (!txCharacteristic.properties.writeWithoutResponse) {
+                    writeNoResponseRate.textContent = "不支持";
+                    addLog("info", "TX 无响应写：特征不支持 writeWithoutResponse");
+                } else {
+                    await runWriteTest(seconds * 1000, false, payload);
+                }
+
+                if (!stopRateTestRequested) {
+                    if (!txCharacteristic.properties.write) {
+                        writeResponseRate.textContent = "不支持";
+                        addLog("info", "TX 响应写：特征不支持 write");
+                    } else {
+                        await runWriteTest(seconds * 1000, true, payload);
+                    }
+                }
+
+                testProgress.textContent = stopRateTestRequested
+                    ? "已停止"
+                    : "测试完成";
+            } finally {
+                rateTestRunning = false;
+                stopRateTestRequested = false;
+                updateUI();
+            }
+        }
+
+        function stopRateTests() {
+            stopRateTestRequested = true;
+            testProgress.textContent = "正在停止...";
+        }
+
+        async function writeChunked(characteristic, bytes) {
+            let chunkSize = getWriteChunkSize();
+            let offset = 0;
+            let fallbackLogged = false;
+            let preferResponse = !!(
+                characteristic &&
+                characteristic.properties &&
+                characteristic.properties.write
+            );
+            let usedWriteMethod = null;
+
+            while (offset < bytes.length) {
+                const chunk = bytes.slice(offset, offset + chunkSize);
+                try {
+                    if (preferResponse && characteristic.properties.write) {
+                        usedWriteMethod = "writeValueWithResponse";
+                        await characteristic.writeValueWithResponse(chunk);
+                    } else if (characteristic.properties.writeWithoutResponse) {
+                        usedWriteMethod = "writeValueWithoutResponse";
+                        await characteristic.writeValueWithoutResponse(chunk);
+                    } else if (characteristic.properties.write) {
+                        usedWriteMethod = "writeValueWithResponse";
+                        await characteristic.writeValueWithResponse(chunk);
+                    } else {
+                        throw new Error(
+                            "TX 特征不支持 write / writeWithoutResponse，无法发送",
+                        );
+                    }
+                    offset += chunk.byteLength;
+                } catch (error) {
+                    if (
+                        preferResponse &&
+                        characteristic.properties.writeWithoutResponse &&
+                        usedWriteMethod !== "writeValueWithoutResponse"
+                    ) {
+                        preferResponse = false;
+                        addLog(
+                            "info",
+                            `TX 有响应写失败，已回退到无响应写: ${error.message}`,
+                        );
+                        try {
+                            usedWriteMethod = "writeValueWithoutResponse";
+                            await characteristic.writeValueWithoutResponse(chunk);
+                            offset += chunk.byteLength;
+                            continue;
+                        } catch (retryError) {
+                            addLog("info", `TX 无响应写回退也失败: ${retryError.message}`);
+                        }
+                    }
+                    if (chunkSize > WRITE_CHUNK_SIZE) {
+                        chunkSize = WRITE_CHUNK_SIZE;
+                        if (!fallbackLogged) {
+                            addLog(
+                                "info",
+                                `当前链路不接受 ${chunk.byteLength} B，已降级为 ${WRITE_CHUNK_SIZE} B 分包`,
+                            );
+                            fallbackLogged = true;
+                        }
+                        continue;
+                    }
+                    throw error;
+                }
+            }
+        }
+
+        function handleNotification(event) {
+            const value = event.target.value;
+            if (!value || value.byteLength === 0) return;
+
+            const bytes = new Uint8Array(
+                value.buffer,
+                value.byteOffset,
+                value.byteLength,
+            );
+            let printable = 0;
+            for (const b of bytes) {
+                if ((b >= 32 && b <= 126) || b === 9 || b === 10 || b === 13)
+                    printable++;
+            }
+            const isText = printable / bytes.length >= 0.8;
+
+            if (isText) {
+                addLog("recv", new TextDecoder().decode(bytes));
+            } else {
+                addLog("recv", bytesToHex(bytes));
+            }
+        }
+
+        async function toggleConnection() {
+            if (isConnected || phase === "connecting") {
+                disconnect();
+            } else {
+                await connect();
+            }
+        }
+
+        async function establishSession() {
+            phase = "connecting";
+            if (!bleDevice || !bleDevice.gatt) {
+                throw new Error("蓝牙连接对象无效");
+            }
+
+            try {
+                if (!bleDevice.gatt.connected) {
+                    bleServer = await bleDevice.gatt.connect();
+                    addLog("info", "GATT 已连接");
+                } else {
+                    bleServer = bleDevice.gatt;
+                }
+
+                const service = await bleServer.getPrimaryService(
+                    selectedServiceProfile.service,
+                );
+                txCharacteristic = await service.getCharacteristic(
+                    selectedServiceProfile.tx,
+                );
+                rxCharacteristic = await service.getCharacteristic(
+                    selectedServiceProfile.rx,
+                );
+                addLog("info", "已获取 TX / RX 特征");
+
+                await rxCharacteristic.startNotifications();
+                rxCharacteristic.addEventListener(
+                    "characteristicvaluechanged",
+                    handleNotification,
+                );
+                addLog("info", `已订阅通知: ${selectedServiceProfile.rx}`);
+
+                phase = "connected";
+                isConnected = true;
+                setStatus("connected", "已连接");
+                connectBtn.disabled = false;
+                updateUI();
+                addLog("info", "蓝牙连接成功，可开始收发数据");
+                return;
+            } catch (error) {
+                if (userRequestedDisconnect) {
+                    throw error;
+                }
+                addLog("error", error.message || String(error));
+                throw error;
+            }
+        }
+
+        async function connect() {
+            if (!navigator.bluetooth) {
+                addLog(
+                    "error",
+                    "当前浏览器不支持 Web Bluetooth API（请使用 Chrome / Edge，并通过 HTTPS 或 localhost 访问）",
+                );
+                setStatus("", "不支持");
+                connectBtn.disabled = true;
+                return;
+            }
+
+            userRequestedDisconnect = false;
+            phase = "connecting";
+            updateUI();
+            setStatus("connecting", "扫描中...");
+            addLog("info", "开始扫描设备，默认过滤设备名 WS...");
+
+            try {
+                const options = {
+                    filters: [{ namePrefix: "WS" }],
+                    optionalServices: [selectedServiceProfile.service],
+                };
+
+                bleDevice = await navigator.bluetooth.requestDevice(options);
+                if (!bleDevice) throw new Error("未选择设备");
+                if (userRequestedDisconnect)
+                    throw new DOMException("用户已取消连接", "AbortError");
+
+                deviceMeta.textContent = bleDevice.name || "未知设备";
+                addLog("info", `已选择设备: ${bleDevice.name || "未知"}`);
+
+                bleDevice.addEventListener("gattserverdisconnected", onDisconnected);
+                await establishSession();
+            } catch (error) {
+                if (!userRequestedDisconnect) {
+                    addLog("error", error.message || String(error));
+                }
+                finishDisconnect();
+            }
+        }
+
+        function disconnect() {
+            userRequestedDisconnect = true;
+            try {
+                if (bleDevice && bleDevice.gatt.connected) {
+                    bleDevice.gatt.disconnect();
+                    addLog("info", "主动断开连接");
+                }
+            } catch (error) {
+                addLog("error", error.message);
+            }
+            finishDisconnect();
+        }
+
+        function onDisconnected() {
+            if (userRequestedDisconnect || phase === "idle") {
+                finishDisconnect();
+                return;
+            }
+            addLog("info", "蓝牙设备已断开");
+            finishDisconnect();
+        }
+
+        function finishDisconnect() {
+            const shouldLog = phase !== "idle" || bleDevice;
+            phase = "idle";
+            if (shouldLog)
+                addLog("info", userRequestedDisconnect ? "连接已取消" : "蓝牙已断开");
+            fullCleanup();
+            setStatus("", "未连接");
+            updateUI();
+        }
+
+        function resetLink() {
+            if (rxCharacteristic) {
+                rxCharacteristic.removeEventListener(
+                    "characteristicvaluechanged",
+                    handleNotification,
+                );
+            }
+            bleServer = null;
+            txCharacteristic = null;
+            rxCharacteristic = null;
+            isConnected = false;
+        }
+
+        function fullCleanup() {
+            resetLink();
+            bleDevice = null;
+            deviceMeta.textContent = "-";
+        }
+
+        async function sendData() {
+            if (!isConnected || !txCharacteristic) {
+                addLog("error", "未连接，无法发送");
+                return;
+            }
+
+            let text = sendInput.value;
+            if (!text) {
+                addLog("error", "发送内容为空");
+                return;
+            }
+            if (autoNewline.checked) text += "\n";
+
+            try {
+                const bytes = toBytes(text, sendFormat);
+                const supportsWriteWithResponse = !!(
+                    txCharacteristic.properties && txCharacteristic.properties.write
+                );
+                const supportsWriteWithoutResponse = !!(
+                    txCharacteristic.properties &&
+                    txCharacteristic.properties.writeWithoutResponse
+                );
+                const methodText = supportsWriteWithResponse
+                    ? "有响应写"
+                    : supportsWriteWithoutResponse
+                        ? "无响应写"
+                        : "未知写模式";
+                await writeChunked(txCharacteristic, bytes);
+                addLog(
+                    "send",
+                    sendFormat === "hex"
+                        ? bytesToHex(bytes)
+                        : text.replace(/\n/g, "\\n"),
+                );
+            } catch (error) {
+                addLog("error", "发送失败: " + error.message);
+            }
+        }
+
+        connectBtn.addEventListener("click", toggleConnection);
+        sendBtn.addEventListener("click", sendData);
+        signalOutputBtn.addEventListener("click", toggleSignalOutput);
+        startRateTestBtn.addEventListener("click", runRateTests);
+        stopRateTestBtn.addEventListener("click", stopRateTests);
+        sendInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                sendData();
+            }
+        });
+
+        updateUI();
+        if (!navigator.bluetooth) {
+            setStatus("", "不支持");
+            connectBtn.disabled = true;
+            addLog(
+                "error",
+                "当前浏览器不支持 Web Bluetooth API（请使用 Chrome / Edge，并通过 HTTPS 或 localhost 访问）",
+            );
+        } else {
+            setStatus("", "未连接");
+            addLog("info", "BLE 测试页就绪");
+            addLog("info", `服务 UUID: ${selectedServiceProfile.service}`);
+        }
+    </script>
+</body>
+
+</html>
