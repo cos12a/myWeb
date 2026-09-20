@@ -193,94 +193,65 @@
             font-size: .78rem;
         }
 
-        .product-stage {
-            position: relative;
-            min-height: 440px;
+        .hero-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            width: min(100%, 380px);
+        }
+
+        .hero-grid-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            aspect-ratio: 1/1;
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: rgba(255, 250, 241, .72);
+            text-decoration: none;
+            transition: transform .22s, border-color .22s, box-shadow .22s;
+            padding: 10px;
+        }
+
+        .hero-grid-item:hover {
+            transform: translateY(-4px) scale(1.03);
+            border-color: var(--orange);
+            box-shadow: 0 10px 24px rgba(169, 65, 43, .13);
+        }
+
+        .hero-grid-item .grid-icon {
+            width: 38px;
+            height: 38px;
             display: grid;
             place-items: center;
-        }
-
-        .product-stage::before {
-            content: "";
-            position: absolute;
-            width: 320px;
-            height: 320px;
             border-radius: 50%;
-            background: #e2cdbb;
+            background: var(--paper-deep);
+            color: var(--orange-dark);
+            font-size: 1.1rem;
         }
 
-        .product {
-            position: relative;
-            width: min(100%, 410px);
-            aspect-ratio: 1/1.08;
-            border-radius: 34px;
-            transform: rotate(5deg);
-            background: linear-gradient(145deg, #e38a62, #a9442d);
-            box-shadow: 24px 27px 0 rgba(108, 67, 43, .12), var(--shadow);
-            overflow: hidden;
-        }
-
-        .product::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            opacity: .34;
-            background: repeating-linear-gradient(105deg, transparent 0 5px, rgba(255, 245, 226, .16) 6px 7px);
-        }
-
-        .product-label {
-            position: absolute;
-            top: 27px;
-            left: 30px;
-            color: rgba(55, 25, 18, .65);
-            font: 700 .72rem "DM Sans", sans-serif;
-            letter-spacing: .2em;
-        }
-
-        .product-control {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 170px;
-            height: 170px;
-            transform: translate(-50%, -50%);
-            border-radius: 50%;
-            background: radial-gradient(circle at 35% 28%, #ffe0ce, #d85b38 60%, #9d3624);
-            box-shadow: 0 16px 28px rgba(87, 27, 16, .3), inset 0 2px 4px rgba(255, 255, 255, .65), inset 0 -5px 8px rgba(98, 22, 10, .3);
-            display: grid;
-            place-items: center;
-            color: #702719;
-            font: 900 1.25rem "DM Sans", sans-serif;
-        }
-
-        .product-control::after {
-            content: "";
-            position: absolute;
-            inset: -27px;
-            border: 12px solid rgba(255, 239, 221, .4);
-            border-left-color: rgba(255, 255, 255, .85);
-            border-radius: 50%;
-            transform: rotate(35deg);
-        }
-
-        .product-foot {
-            position: absolute;
-            bottom: 25px;
-            left: 30px;
-            color: rgba(255, 245, 226, .75);
-            font-size: .78rem;
-        }
-
-        .stage-tag {
-            position: absolute;
-            right: -2px;
-            bottom: 55px;
-            padding: 10px 14px;
-            background: var(--teal);
-            color: white;
-            font-size: .75rem;
+        .hero-grid-item .grid-label {
+            font-size: .68rem;
             font-weight: 700;
-            box-shadow: 8px 8px 0 rgba(43, 119, 113, .14);
+            text-align: center;
+            color: var(--ink);
+            line-height: 1.2;
+        }
+
+        .hero-grid-item.accent {
+            background: var(--ink);
+            border-color: var(--ink);
+        }
+
+        .hero-grid-item.accent .grid-icon {
+            background: var(--orange);
+            color: white;
+        }
+
+        .hero-grid-item.accent .grid-label {
+            color: white;
         }
 
         .intro-band {
@@ -470,12 +441,9 @@
                 font-size: clamp(3rem, 15vw, 5rem)
             }
 
-            .product-stage {
-                min-height: 350px
-            }
-
-            .product {
-                width: min(84vw, 360px)
+            .hero-grid {
+                width: min(84vw, 340px);
+                margin: 0 auto;
             }
 
             .intro-band,
@@ -530,10 +498,16 @@
                             <span>↗</span></a><a class="button button-quiet" href="#tools">浏览开发工具</a><span
                             class="hero-note">可直接在线试用</span></div>
                 </div>
-                <div class="product-stage" aria-label="Stoov 加热垫概念展示">
-                    <div class="product"><span class="product-label">STOOV / BED</span>
-                        <div class="product-control">WARM</div><span class="product-foot">身体与脚部 · 独立控温</span>
-                    </div><span class="stage-tag">正在开发 · 可体验</span>
+                <div class="hero-grid" aria-label="工具快速入口">
+                    <a class="hero-grid-item accent" href="/stoov-test/"><span class="grid-icon">🔥</span><span class="grid-label">Stoov<br>测试</span></a>
+                    <a class="hero-grid-item" href="/stoov-corr/"><span class="grid-icon">🎛️</span><span class="grid-label">Stoov<br>面板</span></a>
+                    <a class="hero-grid-item" href="/instrument/"><span class="grid-icon">📊</span><span class="grid-label">仪器<br>指标</span></a>
+                    <a class="hero-grid-item" href="/stm32flasher/"><span class="grid-icon">⚡</span><span class="grid-label">STM32<br>烧录</span></a>
+                    <a class="hero-grid-item" href="https://esp.unito.top/" target="_blank" rel="noreferrer"><span class="grid-icon">⬇️</span><span class="grid-label">ESP<br>烧录</span></a>
+                    <a class="hero-grid-item" href="https://esp.unito.top/WebSerialPlotter/" target="_blank" rel="noreferrer"><span class="grid-icon">📈</span><span class="grid-label">串口<br>绘图</span></a>
+                    <a class="hero-grid-item" href="/usb-test/"><span class="grid-icon">🔌</span><span class="grid-label">USB<br>测试</span></a>
+                    <a class="hero-grid-item" href="/ws8623/"><span class="grid-icon">📶</span><span class="grid-label">WS8623<br>BLE</span></a>
+                    <a class="hero-grid-item" href="https://esp.unito.top/" target="_blank" rel="noreferrer"><span class="grid-icon">📡</span><span class="grid-label">ESP<br>设备</span></a>
                 </div>
             </section>
             <section class="intro-band" id="about">
@@ -565,7 +539,7 @@
                         <h3>ESP 设备面板</h3>
                         <p>管理 ESP32 / ESP8266 设备，查看状态、远程控制，并尝试 OTA 升级。</p><span class="tool-link">访问设备面板 ↗</span>
                     </a>
-                    <a class="tool-card" href="/esp-web-tools.html"><span class="tool-icon">↓</span>
+                    <a class="tool-card" href="https://esp.unito.top/" target="_blank" rel="noreferrer"><span class="tool-icon">↓</span>
                         <h3>ESP Web Tools</h3>
                         <p>浏览器端固件烧录工具，支持 Web Serial API 与 Manifest 一键安装。</p><span class="tool-link">开始烧录 ↗</span>
                     </a>
@@ -586,6 +560,14 @@
                         rel="noreferrer"><span class="tool-icon">⌁</span>
                         <h3>Web 串口绘图器</h3>
                         <p>把串口数据变成实时曲线，多通道观察设备状态，调试效率立刻不一样。</p><span class="tool-link">查看实时曲线 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/usb-test/"><span class="tool-icon">🔌</span>
+                        <h3>Web USB 测试</h3>
+                        <p>基于 Web USB API 的设备连接测试工具，直接在浏览器中探索 USB 设备通信。</p><span class="tool-link">开始测试 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/ws8623/"><span class="tool-icon">📶</span>
+                        <h3>WS8623 BLE 测试</h3>
+                        <p>基于 Web Bluetooth 的 WS8623 模块调试页面，支持扫描、配对、透传收发与指令测试。</p><span class="tool-link">开始测试 ↗</span>
                     </a>
                 </div>
             </section>

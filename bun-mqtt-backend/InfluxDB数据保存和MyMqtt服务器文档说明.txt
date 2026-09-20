@@ -1,0 +1,734 @@
+IoT 传感器数据平台文档
+版本：v1.0
+最后更新：2026-09-18
+维护者：yzluo
+
+目录
+系统概述
+
+系统架构
+
+组件清单
+
+Mosquitto 配置
+
+InfluxDB 配置
+
+Bun MQTT 消费者
+
+systemd 服务
+
+MQTT 协议规范
+
+ESP32 端实现
+
+数据流与时序
+
+运维命令速查
+
+故障排查
+
+安全注意事项
+
+1. 系统概述
+本系统用于接收 ESP32 传感器通过 MQTT 上报的数据，经过 Bun 后端消费后写入 InfluxDB，供后续查询和可视化使用。
+
+核心设计原则：
+
+数据流与 Web 层解耦：MQTT 消费者独立进程运行，改前端页面不影响数据接收。
+
+权限最小化：不同账号只能操作各自需要的 Topic。
+
+持久会话：消费者和传感器都用 clean_session = 0 + QoS 1，断连期间消息不丢失。
+
+TLS 加密：外部连接经 Nginx TLS 代理，Broker 只监听本机。
+
+2. 系统架构
+text
+┌─────────────┐     MQTTS (8883)      ┌──────────────┐
+│   ESP32     │ ─────────────────────▶│    Nginx     │
+│  传感器设备  │                        │  TLS 终止     │
+└─────────────┘                        └──────┬───────┘
+                                              │ MQTT (1883, 明文)
+                                              ▼
+                                       ┌──────────────┐
+                                       │  Mosquitto   │
+                                       │  127.0.0.1   │
+                                       └──────┬───────┘
+                                              │ MQTT (1883, 明文)
+                                              ▼
+                                       ┌──────────────┐
+                                       │ Bun MQTT     │
+                                       │ 消费者        │
+                                       │ (systemd)    │
+                                       └──────┬───────┘
+                                              │ HTTP API
+                                              ▼
+                                       ┌──────────────┐
+                                       │  InfluxDB    │
+                                       │  127.0.0.1   │
+                                       └──────────────┘
+
+┌─────────────┐     WSS (8083)        ┌──────────────┐
+│  Web 前端    │ ─────────────────────▶│  Mosquitto   │
+│  (mqttuser) │                        │  WebSocket   │
+└─────────────┘                        └──────────────┘
+3. 组件清单
+组件	版本/路径	说明
+操作系统	Linux (Ubuntu/Debian)	服务器
+Mosquitto	2.x	MQTT Broker
+InfluxDB	2.9.1 (OSS)	时序数据库
+Bun	1.1+	JavaScript 运行时
+Nginx	1.18+	TLS 反向代理（含 stream 模块）
+ESP-IDF	5.x	ESP32 开发框架
+关键路径：
+
+项目	路径
+项目根目录	/home/yzluo/myWeb/bun-mqtt-backend
+Bun 可执行文件	/home/yzluo/.bun/bin/bun
+Mosquitto 配置	/etc/mosquitto/conf.d/wss.conf
+Mosquitto ACL	/etc/mosquitto/acl
+Mosquitto 密码文件	/etc/mosquitto/passwd
+systemd 服务	/etc/systemd/system/bun-mqtt-consumer.service
+4. Mosquitto 配置
+4.1 监听配置
+/etc/mosquitto/conf.d/wss.conf：
+
+conf
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+acl_file /etc/mosquitto/acl
+
+# WebSocket（未加密），供 Nginx 代理
+listener 8083 127.0.0.1
+protocol websockets
+
+# MQTTS 直连（TLS 由 Nginx 终止）
+listener 1883 127.0.0.1
+protocol mqtt
+
+# log_type all
+要点：
+
+所有 listener 只绑定 127.0.0.1，外部无法直连。
+
+外部访问必须经过 Nginx（TLS 终止后转发到本机）。
+
+allow_anonymous false 禁用匿名连接。
+
+4.2 密码文件
+/etc/mosquitto/passwd 包含三个用户：
+
+用户名	权限	用途
+mqttuser	readwrite # + read $SYS/#	Web 前端（WSS），全权限
+bun_backend	read sensors/# + write commands/#	Bun 后台，收数据发指令
+sensor_device	write sensors/# + read commands/#	ESP32 传感器，发数据收指令
+创建/修改密码：
+
+bash
+# 新建用户（不加 -c，避免覆盖整个文件）
+sudo mosquitto_passwd /etc/mosquitto/passwd 用户名
+
+# 修改密码（同上）
+sudo mosquitto_passwd /etc/mosquitto/passwd 用户名
+
+# 列出所有用户
+sudo cat /etc/mosquitto/passwd | cut -d: -f1
+⚠️ 绝对不要重复用 -c，-c 会覆盖整个文件。
+
+4.3 ACL 文件
+/etc/mosquitto/acl：
+
+conf
+# ================================
+# 原有账号：保留所有主题的完整权限（WSS 也用这个）
+# ================================
+user mqttuser
+topic readwrite #
+topic read $SYS/#
+
+# ================================
+# Bun 后台：读传感器数据 + 发布指令
+# ================================
+user bun_backend
+topic read sensors/#
+topic write commands/#
+
+# ================================
+# 传感器设备：写数据 + 订阅指令
+# ================================
+user sensor_device
+topic write sensors/#
+topic read commands/#
+要点：
+
+ACL 里没有匹配规则的用户 → 全部拒绝。
+
+# 通配符不匹配 $ 开头的系统主题，$SYS/# 要单独写。
+
+修改后必须重启 Mosquitto。
+
+权限矩阵：
+
+账号	可写	可读	用途
+mqttuser	#	# + $SYS/#	WSS 前端
+bun_backend	commands/#	sensors/#	后台服务
+sensor_device	sensors/#	commands/#	传感器
+4.4 文件权限
+bash
+sudo chown root:mosquitto /etc/mosquitto/acl /etc/mosquitto/passwd
+sudo chmod 640 /etc/mosquitto/acl
+sudo chmod 600 /etc/mosquitto/passwd
+4.5 持久化配置
+确保 Broker 重启后保留持久会话和消息：
+
+conf
+persistence true
+persistence_location /var/lib/mosquitto/
+max_queued_messages 1000
+4.6 管理命令
+bash
+sudo systemctl restart mosquitto
+sudo systemctl status mosquitto --no-pager
+sudo journalctl -u mosquitto -n 50 --no-pager
+sudo journalctl -u mosquitto -f          # 实时日志
+5. InfluxDB 配置
+5.1 连接信息
+项	值
+URL	http://127.0.0.1:8086
+Org	UNITO-ORG
+Bucket	myHeatDemo
+Token	见 .env（不提交 Git）
+Measurement	sensor_reading
+5.2 数据模型
+Tag（索引字段，用于查询过滤）：
+
+Tag	来源	示例
+device_id	从 MQTT Topic 提取	device01
+app	客户端默认标签	mqtt-consumer
+Field（数值/状态，不索引）：
+
+Field	类型	示例
+temperature	float	23.5
+humidity	float	60.2
+pressure	float	1013.25
+status	string	"ok"
+online	boolean	true
+时间戳：纳秒精度，服务器用 Date.now() * 1_000_000 生成。
+
+5.3 查询示例
+bash
+# 查最近 5 分钟所有数据
+influx query 'from(bucket:"myHeatDemo") |> range(start: -5m)' \
+  --org UNITO-ORG --token '你的Token'
+
+# 查特定设备的温度
+influx query 'from(bucket:"myHeatDemo")
+  |> range(start: -1h)
+  |> filter(fn:(r) => r._measurement == "sensor_reading")
+  |> filter(fn:(r) => r.device_id == "device01")
+  |> filter(fn:(r) => r._field == "temperature")' \
+  --org UNITO-ORG --token '你的Token'
+
+# 求最近 1 小时平均温度
+influx query 'from(bucket:"myHeatDemo")
+  |> range(start: -1h)
+  |> filter(fn:(r) => r._measurement == "sensor_reading" and r._field == "temperature")
+  |> mean()' \
+  --org UNITO-ORG --token '你的Token'
+5.4 常用管理命令
+bash
+influx org list
+influx bucket list
+influx auth list
+
+# 查看服务状态
+sudo systemctl status influxdb
+6. Bun MQTT 消费者
+6.1 项目结构
+text
+/home/yzluo/myWeb/bun-mqtt-backend/
+├── src/
+│   ├── consumer.ts              # MQTT 消费者入口
+│   ├── config.ts                # 环境变量集中管理
+│   ├── influx.ts                # InfluxDB 客户端单例
+│   └── services/
+│       └── sensorData.ts        # 数据解析与写入逻辑
+├── .env                         # 环境变量（不提交）
+├── package.json
+└── tsconfig.json
+6.2 环境变量
+.env（权限 600，不提交 Git）：
+
+env
+MQTT_URL=mqtt://127.0.0.1:1883
+MQTT_USER=bun_backend
+MQTT_PASS=bun_cos8mos7
+MQTT_CLIENT_ID=bun-mqtt-consumer
+
+INFLUX_URL=http://127.0.0.1:8086
+INFLUX_TOKEN=你的Token
+INFLUX_ORG=UNITO-ORG
+INFLUX_BUCKET=myHeatDemo
+6.3 核心逻辑
+consumer.ts 关键配置：
+
+配置项	值	说明
+clientId	bun-mqtt-consumer	固定，配合持久会话
+clean	false	持久会话，断连期间 Broker 暂存消息
+reconnectPeriod	5000	5 秒重连
+订阅 Topic	sensors/#	通配符接收所有传感器
+QoS	1	至少一次
+sensorData.ts 字段映射规则：
+
+ts
+const TAG_FIELDS = new Set(['deviceId', 'location', 'type'])
+在 TAG_FIELDS 中的字符串字段 → Tag
+
+数字 → floatField
+
+布尔 → booleanField
+
+其他字符串 → stringField
+
+timestamp 字段若为数字则用作时间戳，否则用 Date.now()
+
+6.4 启动命令
+bash
+cd /home/yzluo/myWeb/bun-mqtt-backend
+
+# 生产（前台）
+bun --env-file=.env run src/consumer.ts
+
+# 开发（热重载）
+bun --env-file=.env --watch run src/consumer.ts
+
+# 通过 npm script
+bun run start
+bun run dev
+package.json 建议添加：
+
+json
+{
+  "scripts": {
+    "start": "bun --env-file=.env run src/consumer.ts",
+    "dev": "bun --env-file=.env --watch run src/consumer.ts"
+  }
+}
+7. systemd 服务
+7.1 服务文件
+/etc/systemd/system/bun-mqtt-consumer.service：
+
+ini
+[Unit]
+Description=Bun MQTT Consumer
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=yzluo
+WorkingDirectory=/home/yzluo/myWeb/bun-mqtt-backend
+ExecStart=/home/yzluo/.bun/bin/bun --env-file=/home/yzluo/myWeb/bun-mqtt-backend/.env run /home/yzluo/myWeb/bun-mqtt-backend/src/consumer.ts
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+7.2 启用与管理
+bash
+# 首次启用
+sudo systemctl daemon-reload
+sudo systemctl enable --now bun-mqtt-consumer
+
+# 状态
+sudo systemctl status bun-mqtt-consumer --no-pager
+
+# 重启（改代码后）
+sudo systemctl restart bun-mqtt-consumer
+
+# 停止
+sudo systemctl stop bun-mqtt-consumer
+
+# 实时日志
+sudo journalctl -u bun-mqtt-consumer -f
+
+# 最近 50 行
+sudo journalctl -u bun-mqtt-consumer -n 50 --no-pager
+
+# 检查开机自启
+sudo systemctl is-enabled bun-mqtt-consumer
+7.3 前台残留检查
+如果曾在前台跑过消费者，务必确认没有残留进程，否则会和 systemd 服务用同一 clientId 抢连接：
+
+bash
+ps aux | grep consumer.ts | grep -v grep
+有输出就 kill <PID>。
+
+8. MQTT 协议规范
+8.1 Topic 规范
+方向	Topic 格式	示例
+传感器上报数据	sensors/{deviceId}/data	sensors/device01/data
+后台下发指令	commands/{deviceId}/set	commands/device01/set
+设备状态（可选）	status/{deviceId}	status/device01
+⚠️ deviceId 必须在 sensors/ 或 commands/ 后的第一段。消费者用 topic.split('/')[1] 提取设备 ID。
+
+8.2 上报数据 JSON 格式
+推荐结构：
+
+json
+{
+  "temperature": 23.5,
+  "humidity": 60.2,
+  "pressure": 1013.25,
+  "status": "ok"
+}
+字段规则：
+
+字段类型	处理方式	示例
+数字	floatField	"temperature": 23.5
+布尔	booleanField	"online": true
+字符串	stringField	"status": "ok"
+deviceId / location / type	Tag	用于查询过滤
+timestamp	时间戳（纳秒）	建议不传，用服务器时间
+⚠️ 不要传毫秒 timestamp，InfluxDB 会当成纳秒解析，时间会错得离谱。要么不传，要么传纳秒。
+
+8.3 指令 JSON 格式
+后台发布到 commands/{deviceId}/set：
+
+json
+{
+  "interval": 10000,
+  "reboot": false
+}
+传感器解析后按需处理。
+
+8.4 发布参数
+参数	建议值	说明
+QoS	1	至少一次，配合持久会话不丢数据
+Retain	false	传感器数据是时序流，不需要保留
+ClientId	esp32-{deviceId}	唯一，避免互相踢下线
+Keep Alive	60 秒	心跳间隔
+8.5 测试命令
+bash
+# 上报数据（模拟传感器）
+mosquitto_pub -h 127.0.0.1 -u sensor_device -P '传感器密码' \
+  -t 'sensors/device01/data' \
+  -m '{"temperature":23.5,"humidity":60.2}'
+
+# 订阅数据（模拟消费者）
+mosquitto_sub -h 127.0.0.1 -u bun_backend -P '密码' \
+  -t 'sensors/#' -v
+
+# 下发指令
+mosquitto_pub -h 127.0.0.1 -u bun_backend -P '密码' \
+  -t 'commands/device01/set' \
+  -m '{"interval":10000}'
+
+# 订阅指令（模拟传感器）
+mosquitto_sub -h 127.0.0.1 -u sensor_device -P '密码' \
+  -t 'commands/#' -v
+
+# 查看 $SYS 系统信息（mqttuser）
+mosquitto_sub -h 127.0.0.1 -u mqttuser -P '密码' \
+  -t '$SYS/#' -v
+9. ESP32 端实现
+9.1 配置参数
+c
+#define WIFI_SSID      "你的WiFi"
+#define WIFI_PASSWORD  "你的WiFi密码"
+#define MQTT_BROKER_URI "mqtts://你的域名:8883"
+#define MQTT_USERNAME  "sensor_device"
+#define MQTT_PASSWORD  "传感器密码"
+#define DEVICE_ID      "device01"   // 每台设备唯一
+
+sudo mosquitto_passwd /etc/mosquitto/passwd bun_backend
+bun_cos8mos7
+sudo mosquitto_passwd /etc/mosquitto/passwd sensor_device
+dev_cos8mos7
+
+9.2 TLS 证书
+从 Let's Encrypt 下载 CA 证书，嵌入代码：
+
+c
+static const char *ROOT_CA = "-----BEGIN CERTIFICATE-----\n"
+                             "MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcN\n"
+                             // ... 完整证书内容 ...
+                             "-----END CERTIFICATE-----\n";
+不要用 setInsecure()，生产环境必须验证证书。
+
+9.3 MQTT 客户端配置
+c
+const esp_mqtt_client_config_t mqtt_cfg = {
+    .broker.address.uri = MQTT_BROKER_URI,
+    .credentials.username = MQTT_USERNAME,
+    .credentials.authentication.password = MQTT_PASSWORD,
+    .credentials.client_id = "esp32-" DEVICE_ID,
+    .session.clean_session = 0,          // 持久会话
+    .broker.verification.certificate = ROOT_CA,
+    .session.keepalive = 60,
+    .session.last_will.topic = "status/" DEVICE_ID,
+    .session.last_will.msg = "offline",
+    .session.last_will.qos = 1,
+    .session.last_will.retain = 1,
+};
+9.4 上报数据（cJSON）
+c
+static void publish_sensor_data(void) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "temperature", read_temperature());
+    cJSON_AddNumberToObject(root, "humidity", read_humidity());
+    cJSON_AddStringToObject(root, "status", "ok");
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    if (json_str) {
+        esp_mqtt_client_publish(s_mqtt_client, s_topic_data,
+                                json_str, 0, 1, 0);  // QoS 1
+        free(json_str);
+    }
+    cJSON_Delete(root);
+}
+9.5 接收指令
+c
+case MQTT_EVENT_DATA: {
+    cJSON *root = cJSON_ParseWithLength(event->data, event->data_len);
+    if (root) {
+        cJSON *interval = cJSON_GetObjectItem(root, "interval");
+        if (cJSON_IsNumber(interval)) {
+            // 更新上报周期
+        }
+        cJSON_Delete(root);
+    }
+    break;
+}
+9.6 sdkconfig 关键项
+ini
+CONFIG_MQTT_PROTOCOL_311=y
+CONFIG_MQTT_TRANSPORT_SSL=y
+CONFIG_CJSON_ENABLE=y
+CONFIG_MQTT_BUFFER_SIZE=2048
+9.7 常见问题
+问题	原因	解决
+TLS 握手失败	CA 证书不对	嵌入正确的 CA 证书
+连接被拒	用户名/密码错	检查 sensor_device 密码
+发布失败	ACL 不允许	确认 Topic 是 sensors/#
+收不到指令	未订阅或 ACL 不对	确认订阅 commands/#
+消息被截断	缓冲区太小	增大 CONFIG_MQTT_BUFFER_SIZE
+两台设备互相踢	ClientId 重复	每台设备用唯一 DEVICE_ID
+10. 数据流与时序
+10.1 正常上报流程
+text
+1. ESP32 采集传感器数据
+2. 构造 JSON: {"temperature":23.5,"humidity":60.2}
+3. 发布到 sensors/device01/data，QoS 1
+4. Nginx TLS 终止，转发到 Mosquitto 127.0.0.1:1883
+5. Mosquitto 检查 ACL: sensor_device 有 write sensors/# 权限 ✓
+6. Mosquitto 投递给订阅者 bun_backend
+7. Bun 消费者收到消息，提取 deviceId
+8. 转换为 InfluxDB Point，调用 writeApi.writePoint()
+9. 客户端批量写入 InfluxDB (默认 1 秒 flush)
+10. 数据持久化到 myHeatDemo bucket
+10.2 断连恢复流程（持久会话）
+text
+1. Bun 消费者进程停止
+2. Mosquitto 保留 bun-mqtt-consumer 的会话
+3. 传感器继续发布 QoS 1 消息
+4. Mosquitto 将消息暂存到队列（最多 max_queued_messages 条）
+5. 消费者重启，用相同 clientId 连接
+6. Mosquitto 补发离线期间的消息
+7. 消费者处理后写入 InfluxDB
+10.3 指令下发流程
+text
+1. Web 前端或 HTTP API 请求下发指令
+2. 后台发布到 commands/device01/set
+3. Mosquitto 检查 ACL: bun_backend 有 write commands/# 权限 ✓
+4. Mosquitto 投递给订阅了 commands/# 的传感器
+5. ESP32 在 MQTT_EVENT_DATA 回调中收到
+6. 用 cJSON 解析，执行对应操作
+11. 运维命令速查
+11.1 服务管理
+bash
+# Mosquitto
+sudo systemctl restart mosquitto
+sudo systemctl status mosquitto --no-pager
+sudo journalctl -u mosquitto -f
+
+# Bun 消费者
+sudo systemctl restart bun-mqtt-consumer
+sudo systemctl status bun-mqtt-consumer --no-pager
+sudo journalctl -u bun-mqtt-consumer -f
+
+# InfluxDB
+sudo systemctl status influxdb
+
+# Nginx
+sudo systemctl restart nginx
+sudo nginx -t                    # 测试配置
+11.2 端口检查
+bash
+ss -tlnp | grep 1883     # Mosquitto MQTT
+ss -tlnp | grep 8083     # Mosquitto WebSocket
+ss -tlnp | grep 8086     # InfluxDB
+ss -tlnp | grep 8883     # Nginx MQTTS
+11.3 日志查看
+bash
+# 实时跟踪消费者
+sudo journalctl -u bun-mqtt-consumer -f
+
+# 最近 100 行
+sudo journalctl -u bun-mqtt-consumer -n 100 --no-pager
+
+# 只看错误
+sudo journalctl -u bun-mqtt-consumer -p err
+
+# Mosquitto 拒绝记录
+sudo journalctl -u mosquitto -n 50 --no-pager | grep -i denied
+11.4 数据验证
+bash
+# 发测试数据
+mosquitto_pub -h 127.0.0.1 -u sensor_device -P '密码' \
+  -t 'sensors/device01/data' -m '{"temperature":23.5}'
+
+# 查 InfluxDB
+influx query 'from(bucket:"myHeatDemo") |> range(start: -5m)' \
+  --org UNITO-ORG --token '你的Token'
+
+# 检查 MQTT 连接数
+mosquitto_sub -h 127.0.0.1 -u mqttuser -P '密码' \
+  -t '$SYS/broker/clients/connected' -C 1
+11.5 更新部署
+bash
+cd /home/yzluo/myWeb/bun-mqtt-backend
+git pull
+bun install --frozen-lockfile
+sudo systemctl restart bun-mqtt-consumer
+sudo journalctl -u bun-mqtt-consumer -n 20 --no-pager
+12. 故障排查
+12.1 MQTT 连接问题
+症状	排查	修复
+Connection refused	ss -tlnp | grep 1883	启动 Mosquitto
+Not authorized	检查密码	mosquitto_passwd 重设
+Denied SUBSCRIBE	查日志	ACL 加 read 权限
+Denied PUBLISH	查日志	ACL 加 write 权限
+WSS 连不上	查 Nginx	检查 stream 配置
+12.2 InfluxDB 写入问题
+症状	原因	修复
+organization name "xxx" not found	INFLUX_ORG 错	influx org list 查真实值
+bucket "xxx" not found	INFLUX_BUCKET 错	influx bucket list
+401 Unauthorized	Token 无效	重新生成 Token
+数据查不到	批处理未 flush	等 1~2 秒再查
+12.3 数据丢失问题
+症状	排查	修复
+断连期间数据丢失	检查 clean_session	设为 false
+重启后丢数据	检查 clientId	固定为 bun-mqtt-consumer
+传感器重启丢数据	检查 ESP32 clean_session	设为 0
+消息被截断	检查 JSON 长度	增大 CONFIG_MQTT_BUFFER_SIZE
+12.4 systemd 服务问题
+bash
+# 服务启动失败
+sudo systemctl status bun-mqtt-consumer --no-pager -l
+sudo journalctl -xeu bun-mqtt-consumer --no-pager | tail -30
+
+# 常见原因
+# 1. bun 路径错 → which bun 确认
+# 2. .env 权限问题 → chmod 600
+# 3. 工作目录不存在 → 检查 WorkingDirectory
+12.5 排查工具
+bash
+# 查看 Mosquitto 日志（实时）
+sudo journalctl -u mosquitto -f
+
+# 查看 ACL 拒绝记录
+sudo journalctl -u mosquitto -f | grep -i "denied\|not authorised"
+
+# 查看当前 MQTT 连接
+mosquitto_sub -h 127.0.0.1 -u mqttuser -P '密码' \
+  -t '$SYS/broker/clients/connected' -v
+
+# 测试端口连通性
+nc -zv 127.0.0.1 1883
+13. 安全注意事项
+13.1 凭证管理
+✅ .env 权限设为 600，只允许所有者读写。
+
+✅ .env 不提交 Git，加入 .gitignore。
+
+✅ Token 和密码不要出现在日志、对话、截图中。
+
+✅ 定期更换 Token 和密码。
+
+⚠️ 如果 Token 曾泄露（如贴到聊天），立即在 InfluxDB 重新生成并作废旧的。
+
+13.2 网络暴露
+✅ Mosquitto 只监听 127.0.0.1，外部无法直连。
+
+✅ 外部连接经 Nginx TLS 代理。
+
+✅ InfluxDB 只监听 127.0.0.1，不暴露公网。
+
+✅ 防火墙只开放必要端口（443、8883）。
+
+13.3 ACL 权限
+✅ 每个账号权限最小化。
+
+✅ 传感器只能写自己的数据主题。
+
+✅ 传感器只能读指令主题。
+
+✅ 后台只能读数据、写指令。
+
+✅ 只有 mqttuser 有全权限（WSS 前端）。
+
+13.4 TLS 配置
+✅ 使用 Let's Encrypt 证书。
+
+✅ 禁用 TLS 1.0 / 1.1。
+
+✅ ESP32 必须验证服务器证书，不用 setInsecure()。
+
+✅ 定期续期证书（certbot renew）。
+
+13.5 容器化注意（如使用）
+✅ 敏感值用 ${} 从宿主机环境读，不写死 compose。
+
+✅ 内部服务用 expose，不映射端口到宿主机。
+
+✅ 容器内用非 root 用户运行。
+
+✅ .dockerignore 排除 .env 和 node_modules。
+
+附录 A：快速部署清单
+从零搭建的完整顺序：
+
+□ 安装 Mosquitto、InfluxDB、Bun、Nginx
+□ 配置 Mosquitto 监听 127.0.0.1:1883 和 127.0.0.1:8083
+□ 创建密码文件，添加 mqttuser / bun_backend / sensor_device
+□ 创建 ACL 文件，分配权限
+□ 配置 Nginx stream TLS 代理
+□ 配置 InfluxDB，获取 Token、Org、Bucket
+□ 克隆项目到 /home/yzluo/myWeb/bun-mqtt-backend
+□ 创建 .env，权限 600
+□ bun install
+□ 前台测试 bun --env-file=.env run src/consumer.ts
+□ 发测试数据，验证 InfluxDB 写入
+□ 创建 systemd 服务并启用
+□ ESP32 烧录，配置 WiFi、MQTTS、证书
+□ 验证端到端数据流
+附录 B：关键参数速查
+参数	值
+Mosquitto MQTT	127.0.0.1:1883
+Mosquitto WebSocket	127.0.0.1:8083
+Nginx MQTTS	0.0.0.0:8883
+InfluxDB	127.0.0.1:8086
+InfluxDB Org	UNITO-ORG
+InfluxDB Bucket	myHeatDemo
+Measurement	sensor_reading
+数据 Topic	sensors/{deviceId}/data
+指令 Topic	commands/{deviceId}/set
+消费者 ClientId	bun-mqtt-consumer
+传感器 ClientId	esp32-{deviceId}
+QoS	1
+持久会话	clean_session = false
+文档结束。如有更新，请修改版本号和日期。

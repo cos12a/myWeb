@@ -1,4 +1,5 @@
-import { InfluxDB, WriteApi } from "@influxdata/influxdb-client";
+import { InfluxDB } from "@influxdata/influxdb-client";
+import type { WriteApi } from "@influxdata/influxdb-client";
 import { config } from "./config";
 
 export const influxDB = new InfluxDB({

@@ -22,9 +22,11 @@ client.on("connect", () => {
       console.error("❌ 订阅失败:", err);
       return;
     }
+
+    const grants = granted ?? [];
     console.log(
       "📡 已订阅:",
-      granted.map((g) => `${g.topic} (QoS ${g.qos})`).join(", "),
+      grants.map((g) => `${g.topic} (QoS ${g.qos})`).join(", "),
     );
   });
 });

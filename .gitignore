@@ -39,3 +39,5 @@ report.*.json
 .codegraph/
 
 webSerialPlotter/dist/
+
+!bun-mqtt-backend/.env

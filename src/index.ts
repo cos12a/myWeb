@@ -41,17 +41,29 @@ app.use(
 app.get("/stoov-corr", serveStatic({ path: "./stoov-corr/index.html" }));
 app.get("/stoov-corr/", serveStatic({ path: "./stoov-corr/index.html" }));
 
-// InstrumentTest 仪器指标面板：托管原生静态页面（Web Bluetooth + NUS 透传）
+// InstrumentTestLit 仪器指标面板：托管 Lit 组件构建产物（Web Bluetooth + NUS 透传）
 app.use(
   "/instrument/*",
   serveStatic({
     root: "./",
     rewriteRequestPath: (path: string) =>
-      path.replace(/^\/instrument/, "/InstrumentTest"),
+      path.replace(/^\/instrument/, "/InstrumentTestLit/dist"),
   }),
 );
-app.get("/instrument", serveStatic({ path: "./InstrumentTest/index.html" }));
-app.get("/instrument/", serveStatic({ path: "./InstrumentTest/index.html" }));
+app.get("/instrument", serveStatic({ path: "./InstrumentTestLit/dist/index.html" }));
+app.get("/instrument/", serveStatic({ path: "./InstrumentTestLit/dist/index.html" }));
+
+// WS8623 BLE 蓝牙测试：托管 ws8623Demo 目录下的原生静态页面
+app.use(
+  "/ws8623/*",
+  serveStatic({
+    root: "./",
+    rewriteRequestPath: (path: string) =>
+      path.replace(/^\/ws8623/, "/ws8623Demo"),
+  }),
+);
+app.get("/ws8623", serveStatic({ path: "./ws8623Demo/index.html" }));
+app.get("/ws8623/", serveStatic({ path: "./ws8623Demo/index.html" }));
 
 // STM32 Web 烧录工具：将公开 URL 映射到 stm32WebFlasher 的 dist 目录
 app.use(
@@ -70,6 +82,18 @@ app.get(
   "/stm32flasher/",
   serveStatic({ path: "./stm32WebFlasher/dist/index.html" }),
 );
+
+// USB 测试工具：托管原生静态页面
+app.use(
+  "/usb-test/*",
+  serveStatic({
+    root: "./",
+    rewriteRequestPath: (path: string) =>
+      path.replace(/^\/usb-test/, "/usb-test"),
+  }),
+);
+app.get("/usb-test", serveStatic({ path: "./usb-test/index.html" }));
+app.get("/usb-test/", serveStatic({ path: "./usb-test/index.html" }));
 
 // 托管 public 目录下的静态文件
 app.use("/*", serveStatic({ root: "./public" }));
