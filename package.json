@@ -5,9 +5,14 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build:stoov-test": "cd stoov-test && bun run build",
-    "build": "bun run build:stoov-test",
-    "start": "bun run --smol src/index.ts"
+    "start": "bun run --smol src/index.ts",
+    "install:all": "bun install && cd stoov-test && bun install && cd ../InstrumentTestLit && bun install && cd ../stm32WebFlasher && bun install && cd ../webSerialPlotter && bun install && cd ../bun-mqtt-backend && bun install",
+    "build:stoov-test": "cd stoov-test && bun install --frozen-lockfile && bun run build",
+    "build:instrument": "cd InstrumentTestLit && bun install --frozen-lockfile && bun run build",
+    "build:stm32flasher": "cd stm32WebFlasher && bun install --frozen-lockfile && bun run build",
+    "build:plotter": "cd webSerialPlotter && bun install --frozen-lockfile && bun run build",
+    "build": "bun run build:stoov-test && bun run build:instrument && bun run build:stm32flasher && bun run build:plotter",
+    "build:parallel": "bun run scripts/build-all.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0"
