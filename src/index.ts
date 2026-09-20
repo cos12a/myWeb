@@ -83,6 +83,24 @@ app.get(
   serveStatic({ path: "./stm32WebFlasher/dist/index.html" }),
 );
 
+// Web 串口绘图器（本地构建产物）：dist 使用绝对 base "/WebSerialPlotter/"，路径必须保持一致
+app.use(
+  "/WebSerialPlotter/*",
+  serveStatic({
+    root: "./",
+    rewriteRequestPath: (path: string) =>
+      path.replace(/^\/WebSerialPlotter/, "/webSerialPlotter/dist"),
+  }),
+);
+app.get(
+  "/WebSerialPlotter",
+  serveStatic({ path: "./webSerialPlotter/dist/index.html" }),
+);
+app.get(
+  "/WebSerialPlotter/",
+  serveStatic({ path: "./webSerialPlotter/dist/index.html" }),
+);
+
 // USB 测试工具：托管原生静态页面
 app.use(
   "/usb-test/*",
