@@ -3,6 +3,19 @@ import { config } from "./config";
 import { logger } from "./logger";
 import { parseDeviceIdFromTopic, SensorPayloadSchema } from "./schema";
 import { writeSensorData } from "./services/sensorData";
+import { computeDedupKey, MessageDeduplicator } from "./dedup";
+
+/**
+ * 全局去重器实例（模块级单例），供 health 端点读取 stats。
+ */
+export const deduplicator = new MessageDeduplicator({
+  enabled: config.dedup.enabled,
+  maxSize: config.dedup.maxSize,
+  ttlMs: config.dedup.ttlMs,
+});
+
+/** 周期性清扫过期条目的定时器句柄，供 shutdown 时清理 */
+let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * 启动 MQTT 消费者。
@@ -11,6 +24,7 @@ import { writeSensorData } from "./services/sensorData";
  * - clean:false + 固定 clientId：Broker 会保留掉线期间的消息（持久会话）
  * - reconnectPeriod:5000：断线 5s 自动重连
  * - 所有 payload 都经过 Zod 校验，非法消息只记日志、不入库
+ * - 应用层去重：LRU + TTL 缓存，防止 QoS≥1 重投或传感器重发导致数据翻倍
  */
 export function startConsumer(): MqttClient {
   const { url, username, password, clientId, subscribeTopic, qos } = config.mqtt;
@@ -71,7 +85,17 @@ export function startConsumer(): MqttClient {
     }
     const data = parsed.data;
 
-    // 3) 提取 deviceId：topic 优先，其次 payload，最后兜底 unknown
+    // 3) 应用层去重（LRU + TTL）
+    const { key: dedupKey, source: dedupSource } = computeDedupKey(topic, raw, data);
+    if (!deduplicator.checkAndRecord(dedupKey)) {
+      logger.debug(
+        { topic, dedupKey, dedupSource },
+        "重复消息已丢弃（应用层去重命中）",
+      );
+      return;
+    }
+
+    // 4) 提取 deviceId：topic 优先，其次 payload，最后兜底 unknown
     const deviceId =
       parseDeviceIdFromTopic(topic) ??
       (typeof data.deviceId === "string" ? data.deviceId : null) ??
@@ -81,7 +105,7 @@ export function startConsumer(): MqttClient {
       logger.warn({ topic }, "无法确定 deviceId，仍将以 unknown 入库");
     }
 
-    // 4) 时间戳：payload 有就用，没有走 InfluxDB 端当前时间
+    // 5) 时间戳：payload 有就传下去，sensorData 里会做单位归一化
     const ts = typeof data.timestamp === "number" ? data.timestamp : undefined;
 
     try {
@@ -90,7 +114,7 @@ export function startConsumer(): MqttClient {
         data as Record<string, unknown>,
         ts,
       );
-      logger.debug({ topic, deviceId }, "已入队写入 InfluxDB");
+      logger.debug({ topic, deviceId, dedupSource }, "已入队写入 InfluxDB");
     } catch (err) {
       logger.error({ topic, deviceId, err }, "写入 InfluxDB 失败");
     }
@@ -101,5 +125,26 @@ export function startConsumer(): MqttClient {
   client.on("offline", () => logger.warn("MQTT 客户端离线"));
   client.on("error", (err) => logger.error({ err }, "MQTT 错误"));
 
+  // 6) 定时清扫过期去重条目（每 TTL/2 一次，避免 Map 无限增长）
+  if (config.dedup.enabled) {
+    const sweepIntervalMs = Math.max(30_000, Math.floor(config.dedup.ttlMs / 2));
+    sweepTimer = setInterval(() => {
+      const removed = deduplicator.sweep();
+      if (removed > 0) {
+        logger.debug({ removed, stats: deduplicator.getStats() }, "去重缓存清扫完成");
+      }
+    }, sweepIntervalMs);
+    // 不阻塞事件循环退出
+    sweepTimer.unref?.();
+  }
+
   return client;
+}
+
+/** 停止周期性清扫（优雅关闭时调用） */
+export function stopConsumerTimers(): void {
+  if (sweepTimer) {
+    clearInterval(sweepTimer);
+    sweepTimer = null;
+  }
 }

@@ -23,6 +23,14 @@ const EnvSchema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
   HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(9000),
+
+  // 应用层去重（LRU + TTL）
+  DEDUP_ENABLED: z
+    .enum(["true", "false", "1", "0"])
+    .default("true")
+    .transform((v) => v === "true" || v === "1"),
+  DEDUP_MAX_SIZE: z.coerce.number().int().min(100).max(1_000_000).default(10_000),
+  DEDUP_TTL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(300_000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -64,6 +72,11 @@ export const config = {
   health: {
     port: env.HEALTH_PORT,
   },
+  dedup: {
+    enabled: env.DEDUP_ENABLED,
+    maxSize: env.DEDUP_MAX_SIZE,
+    ttlMs: env.DEDUP_TTL_MS,
+  },
 } as const;
 
 /** 脱敏后的配置快照，可安全写入日志 */
@@ -83,5 +96,6 @@ export function configSnapshot() {
     },
     log: { level: config.log.level },
     health: { port: config.health.port },
+    dedup: { ...config.dedup },
   };
 }

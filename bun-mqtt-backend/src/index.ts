@@ -1,6 +1,6 @@
 import { config, configSnapshot } from "./config";
 import { logger } from "./logger";
-import { startConsumer } from "./consumer";
+import { startConsumer, stopConsumerTimers, deduplicator } from "./consumer";
 import { startHealthServer } from "./health";
 import { shutdownInflux } from "./influx";
 
@@ -19,7 +19,10 @@ import { shutdownInflux } from "./influx";
 logger.info({ config: configSnapshot() }, "启动 bun-mqtt-backend");
 
 const mqttClient = startConsumer();
-const healthServer = startHealthServer({ mqttClient });
+const healthServer = startHealthServer({
+  mqttClient,
+  getDedupStats: () => deduplicator.getStats(),
+});
 
 let shuttingDown = false;
 
@@ -40,12 +43,15 @@ async function shutdown(reason: string): Promise<void> {
     // 1) 停止接受新的健康检查请求
     healthServer.stop(true);
 
-    // 2) 断开 MQTT（true = 立即断开，不等待发送队列）
+    // 2) 停止周期性任务（去重缓存清扫）
+    stopConsumerTimers();
+
+    // 3) 断开 MQTT（true = 立即断开，不等待发送队列）
     await new Promise<void>((resolve) => {
       mqttClient.end(true, () => resolve());
     });
 
-    // 3) 刷出 InfluxDB 缓冲区（内部已 catch 错误，不会抛出）
+    // 4) 刷出 InfluxDB 缓冲区（内部已 catch 错误，不会抛出）
     await shutdownInflux();
 
     logger.info("已安全退出");

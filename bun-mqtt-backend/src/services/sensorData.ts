@@ -1,6 +1,7 @@
 import { Point } from "@influxdata/influxdb-client";
 import { writeApi } from "../influx";
 import { logger } from "../logger";
+import { normalizeToNanoseconds } from "../utils/timestamp";
 
 // 哪些字段作为 Tag（会被索引，适合查询过滤）
 const TAG_FIELDS = new Set(["location", "type"]);
@@ -39,8 +40,14 @@ export async function writeSensorData(
     }
   }
 
-  // 时间戳：传感器没传就用当前时间（纳秒精度）
-  point.timestamp(timestamp ?? Date.now() * 1_000_000);
+  // 时间戳：智能识别单位（s/ms/us/ns）并归一化为纳秒；缺失则用当前时间
+  const { nanos, unit, usedFallback } = normalizeToNanoseconds(timestamp);
+  if (usedFallback) {
+    logger.debug({ deviceId }, "payload 未提供 timestamp，使用服务器当前时间");
+  } else if (unit !== "ns") {
+    logger.debug({ deviceId, unit }, "已自动将时间戳转换为纳秒");
+  }
+  point.timestamp(nanos);
 
   writeApi.writePoint(point);
 }
