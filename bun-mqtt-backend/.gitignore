@@ -17,10 +17,15 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # dotenv environment variable files
 .env
+.env.debug
 .env.development.local
 .env.test.local
 .env.production.local
 .env.local
+
+# 保留 example 模板，方便团队协作
+!.env.example
+!.env.debug.example
 
 # caches
 .eslintcache

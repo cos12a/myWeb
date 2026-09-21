@@ -1,8 +1,16 @@
 {
   "name": "bun-mqtt-backend",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "start": "bun --env-file=.env run src/index.ts",
+    "dev": "bun --env-file=.env --watch run src/index.ts",
+    "start:debug": "bun --env-file=.env.debug run src/index.ts",
+    "dev:debug": "bun --env-file=.env.debug --watch run src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -11,6 +19,8 @@
   },
   "dependencies": {
     "@influxdata/influxdb-client": "^1.35.0",
-    "mqtt": "^5.16.0"
+    "mqtt": "^5.16.0",
+    "pino": "^9.5.0",
+    "zod": "^3.23.8"
   }
 }
