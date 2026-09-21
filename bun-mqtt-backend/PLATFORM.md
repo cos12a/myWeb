@@ -1,9 +1,9 @@
 # IoT 传感器数据平台文档
 
-> **版本**：v2.0（生产级重构版）
+> **版本**：v2.1（字段类型智能处理版）
 > **最后更新**：2026-09-21
 > **维护者**：yzluo
-> **重构说明**：本版本对应 `bun-mqtt-backend` 生产级重构后的架构（Zod 校验 + Pino 结构化日志 + 健康检查端点 + LRU 消息去重 + 智能时间戳单位识别）。
+> **重构说明**：本版本对应 `bun-mqtt-backend` v2.1，在 v2.0 基础上新增字段类型智能强转与 Debug 数据快照日志（Zod 校验 + Pino 结构化日志 + 健康检查端点 + LRU 消息去重 + 智能时间戳单位识别）。
 > **凭据说明**：⚠️ 本文档中所有密码 / Token 均已用占位符遮蔽，实际值请从本地 `.env`（不入库）读取。
 
 ---
@@ -260,11 +260,34 @@ sudo journalctl -u mosquitto -f          # 实时日志
 
 | JS 类型 | InfluxDB Field 类型 | 示例 |
 |---|---|---|
-| `number` | `float` | `temperature=23.5` |
+| `number`（有限） | `float` | `temperature=23.5` |
+| `number`（NaN / Infinity） | 跳过，记 debug 日志 | — |
 | `boolean` | `boolean` | `online=true` |
 | `string`（非 tag 字段） | `string` | `status="ok"` |
-| `object` / `array` | 跳过，仅记 debug 日志 | — |
+| `string`（白名单字段且可解析为数字） | `float`（自动强转） | `temperature="25.6"` → `25.6` |
+| `object` / `array` / `function` / `bigint` | 跳过 | — |
 | `null` / `undefined` | 跳过 | — |
+
+**数值字段白名单**（v2.1 新增，定义在 `src/services/fieldClassifier.ts`）：
+
+当以下字段被传感器误传成字符串时，后端会自动强转为 float，避免 InfluxDB
+中该字段被锁死为 string 类型导致 `mean()` / `max()` 等聚合报错：
+
+```
+temperature, humidity, pressure, dewPoint,
+battery, voltage, current, power, energy,
+rssi, snr,
+lux, co2, tvoc, pm25, pm10, pm1,
+altitude, windSpeed, windDirection, rainfall,
+soilMoisture, soilTemperature, waterLevel,
+value, count, duration, weight, distance
+```
+
+强转发生时会记 `warn` 日志，方便定位是哪台设备固件需要修：
+
+```json
+{"level":"warn","deviceId":"ESP32-001","field":"temperature","raw":"25.6","coercedTo":25.6,"msg":"字段本应是数值但收到字符串，已自动转为 float（建议修传感器固件）"}
+```
 
 **时间戳（v2.0 智能单位识别）**：
 
@@ -327,6 +350,122 @@ influx bucket create --name myHeatDemoDebug --retention 7d --org UNITO-ORG
 # 查看服务状态
 sudo systemctl status influxdb
 ```
+
+### 5.6 InfluxDB 字段类型锁定机制（❗ 必读）
+
+InfluxDB 与关系型数据库不同，它有一条铁律：
+
+> **同一个 series（measurement + tag set）下的同一个 field，只能有一种类型。**
+> **一旦写入，类型就永久锁定。后续不同类型的写入会被静默拒绝。**
+
+#### 5.6.1 Series 的定义
+
+```
+Series Key = Measurement + 完整的 Tag Set
+
+例：
+sensor_reading,app=mqtt-consumer,device_id=ESP32-001,location=living-room,type=dht22
+↑ 这是一个 series
+
+如果 location 变为 kitchen，就是另一个 series（类型独立锁定）
+```
+
+#### 5.6.2 支持的 field 类型（不可互转）
+
+| InfluxDB 类型 | 对应 JS 类型 | Line Protocol 写法 |
+|---|---|---|
+| `float` | `number` | `value=25.6` |
+| `integer` | —（本项目不用） | `value=42i` |
+| `uinteger` | —（本项目不用） | `value=42u` |
+| `string` | `string` | `value="ok"` |
+| `boolean` | `boolean` | `value=t` / `value=f` |
+
+#### 5.6.3 污染场景时间线（真实案例）
+
+```text
+T1  传感器早期固件有 bug
+    → 发送 {"voltage":"4.20"}（字符串）
+    → 后端旧代码走 stringField 分支
+    → InfluxDB 记录：series=ESP32-7C2C6751DA00, field=voltage, type=STRING 🔒
+
+T2  你修复了固件
+    → 发送 {"voltage":4.25}（数字）
+    → 后端新代码走 floatField 分支
+    → InfluxDB 拒绝写入：❌ field type conflict
+    → writeApi 重试 3 次后丢弃，你可能都没看到日志
+
+T3  今天：新数据全部被拒绝，只有 T1 那批 string 数据留在库里
+    → 查询 mean() → 命中 string 数据 → 报错 💥
+    → unsupported input type for mean aggregate: string
+```
+
+#### 5.6.4 v2.1 的自动预防机制
+
+本项目在 `src/services/fieldClassifier.ts` 中定义了 `NUMERIC_FIELD_HINTS` 白名单（voltage / temperature / battery / rssi / pm25 …），
+当传感器误传字符串时会自动强转为 float，**从源头避免类型污染**。
+
+但仍需注意：
+
+- 白名单只盖常见字段，自定义字段需手动加入
+- 历史已污染的数据不会自动修复，需人工处理（见 §12.7）
+- 非白名单字段（如 `status`）仍可能因固件变更而被污染
+
+#### 5.6.5 监控写入拒绝（早期发现污染）
+
+writeApi 重试 3 次失败后会将错误输出到 stderr，被 systemd journal 捕获：
+
+```bash
+# 实时监听 field type conflict
+sudo journalctl -u bun-mqtt-consumer -f -o cat \
+  | grep -iE "field type conflict|write.*fail|400"
+
+# 查最近 24 小时的所有错误
+sudo journalctl -u bun-mqtt-consumer --since "24 hours ago" -o cat \
+  | jq 'select(.level == "error" or .level == 50)'
+```
+
+一旦看到：
+
+```text
+field type conflict: input field "voltage" on bucket "myHeatDemo" 
+is type float, already exists as type string
+```
+
+**立即处理**，否则后续所有新数据都会被静默丢弃。
+
+#### 5.6.6 字段类型诊断查询模板
+
+把下面的 `<DEVICE_ID>` 和 `<FIELD_NAME>` 替换成实际值，即可得到该字段的类型分布：
+
+```flux
+from(bucket: "myHeatDemo")
+  |> range(start: -30d)
+  |> filter(fn: (r) => r._measurement == "sensor_reading")
+  |> filter(fn: (r) => r.device_id == "<DEVICE_ID>")
+  |> filter(fn: (r) => r._field == "<FIELD_NAME>")
+  |> map(fn: (r) => ({ r with valueType: typeof(v: r._value) }))
+  |> group(columns: ["valueType"])
+  |> count()
+  |> keep(columns: ["valueType", "_value"])
+```
+
+**结果解读**：
+
+| 输出 | 含义 | 处理 |
+|---|---|---|
+| 只有 `float` | ✅ 健康 | 无需处理 |
+| 只有 `string` | ⚠️ 字段被锁死为字符串 | 新数据正在被静默拒绝，马上修复 |
+| `string` + `float` 共存 | ⚠️ 不同 tag set 下类型不一致 | 按 device_id 进一步分组分析 |
+| 只有 `boolean` / 其他 | 根据业务语义判断 | — |
+
+#### 5.6.7 预防检查清单（开发新传感器时必看）
+
+- [ ] payload 中的数值字段已加入 `NUMERIC_FIELD_HINTS` 白名单
+- [ ] 传感器固件用 `cJSON_AddNumberToObject`，不用 `cJSON_AddStringToObject`
+- [ ] tag 字段（location / type）保证**每次都发**，避免 series 分裂
+- [ ] tag 字段值域**低基数**（不要把 timestamp / messageId 当 tag）
+- [ ] 新设备首次上线前，先用 debug bucket 跑一批数据，确认无 field type conflict
+- [ ] 生产环境部署 `journalctl | grep 'field type conflict'` 监控告警
 
 ---
 
@@ -410,7 +549,7 @@ DEDUP_TTL_MS=300000
 | `health.ts` | `startHealthServer()` 提供 `/`、`/health`、`/stats` |
 | `index.ts` | 装配所有模块 + 注册 SIGINT/SIGTERM 优雅关闭 |
 
-### 6.4 消息处理流水线（9 步）
+### 6.4 消息处理流水线（10 步）
 
 ```text
 MQTT 消息到达
@@ -424,7 +563,7 @@ MQTT 消息到达
    - 否则 Bun.hash(topic + "|" + raw)       → "h:xxx"
     ↓
 ④ LRU 缓存命中？
-   ├─ 是 → debug 日志，丢弃 ⭐ v2.0 新增
+   ├─ 是 → debug 日志，丢弃
    └─ 否 → 加入缓存（TTL 5 分钟）
     ↓
 ⑤ 提取 deviceId
@@ -432,19 +571,77 @@ MQTT 消息到达
    - 其次 payload.deviceId
    - 兜底 "unknown"（记 warn）
     ↓
-⑥ 智能识别 timestamp 单位（s/ms/μs/ns）并归一化为纳秒 ⭐ v2.0 新增
+⑥ Debug 模式数据快照（v2.1 新增）
+   LOG_LEVEL=debug|trace 时，打印完整 payload + 每个字段的分类预览
+    ↓
+⑦ 智能识别 timestamp 单位（s/ms/μs/ns）并归一化为纳秒
    - 缺失或非法 → 用服务器当前时间
     ↓
-⑦ 构造 InfluxDB Point
-   - Tag: device_id + location + type + app
-   - Field: 按 JS 类型自动映射
+⑧ 字段分类（classifyField）
+   - 白名单字段字符串 → 自动强转 float + warn
+   - tag / float / boolean / string / skip 五路分派
     ↓
-⑧ writeApi.writePoint() 入批量缓冲
+⑨ 构造 InfluxDB Point，writeApi.writePoint() 入批量缓冲
     ↓
-⑨ 缓冲区满 500 条 或 1 秒定时到 → HTTP 批量写入 InfluxDB
+⑩ 缓冲区满 500 条 或 1 秒定时到 → HTTP 批量写入 InfluxDB
 ```
 
-### 6.5 MQTT 客户端关键配置（保持不变）
+### 6.5 Debug 数据日志（v2.1 新增）
+
+将 `.env` 里的 `LOG_LEVEL` 设为 `debug` 或 `trace`，每收到一条 MQTT 消息
+就会打印一个完整的数据快照（包含原始 payload + 字段分类预览）：
+
+```json
+{
+  "level": "debug",
+  "time": "2026-09-21T14:23:11.482Z",
+  "app": "bun-mqtt-backend",
+  "topic": "sensors/ESP32-001/data",
+  "deviceId": "ESP32-001",
+  "dedupKey": "id:messageId:ESP32-001-42",
+  "dedupSource": "id",
+  "payload": {
+    "temperature": "25.6",
+    "humidity": 60.2,
+    "status": "ok",
+    "location": "living-room",
+    "messageId": "ESP32-001-42"
+  },
+  "fields": [
+    { "field": "temperature", "kind": "float",  "value": 25.6, "coercedFrom": "25.6" },
+    { "field": "humidity",    "kind": "float",  "value": 60.2 },
+    { "field": "status",      "kind": "string", "value": "ok" },
+    { "field": "location",    "kind": "tag",    "value": "living-room" },
+    { "field": "messageId",   "kind": "string", "value": "ESP32-001-42" }
+  ],
+  "rawLength": 148,
+  "msg": "📥 收到 MQTT 消息（debug 数据快照）"
+}
+```
+
+**实用过滤命令**：
+
+```bash
+# 实时跟所有 debug 数据快照
+sudo journalctl -u bun-mqtt-consumer -f -o cat | jq 'select(.msg | contains("数据快照"))'
+
+# 只看某台设备
+sudo journalctl -u bun-mqtt-consumer -f -o cat \
+  | jq 'select(.deviceId=="ESP32-001")'
+
+# 只看发生了字符串强转的字段（定位固件 bug）
+sudo journalctl -u bun-mqtt-consumer -f -o cat \
+  | jq 'select(.msg | contains("已自动转为 float"))'
+
+# 只看被跳过的字段（object / null / NaN）
+sudo journalctl -u bun-mqtt-consumer -f -o cat \
+  | jq 'select(.msg=="跳过字段")'
+```
+
+> ⚠️ **生产环境不建议长期开 `debug`**：高频传感器下日志量很大。
+> 排查完问题后把 `LOG_LEVEL` 改回 `info` 并重启。
+
+### 6.6 MQTT 客户端关键配置（保持不变）
 
 | 配置项 | 值 | 说明 |
 |---|---|---|
@@ -979,6 +1176,8 @@ curl -fsS http://localhost:9000/health | jq
 | `401 Unauthorized` | Token 无效 | 重新生成 Token |
 | 数据查不到 | 批处理未 flush | 等 1~2 秒再查 |
 | 数据落在 1970 年 | timestamp 单位错 | v2.0 已自动修复；若仍存在检查 `src/utils/timestamp.ts` |
+| `unsupported input type for mean aggregate: string` | 字段被写成 string | 见 12.7 节 |
+| `field type conflict: input field "X" is type float, already exists as type string` | 同一 field 历史写过两种类型 | 见 12.7 节 |
 
 ### 12.3 数据丢失 / 重复问题
 
@@ -1043,6 +1242,105 @@ nc -zv 127.0.0.1 9000    # 健康检查端口
 # 查看进程占用
 sudo lsof -i :9000
 ```
+
+### 12.7 字段类型问题（v2.1 新增）
+
+**症状**：
+
+- 查询报错：`unsupported input type for mean aggregate: string`
+- 写入日志报错：`field type conflict: input field "temperature" on bucket "X" is type float, already exists as type string`
+- Grafana 图表中某个字段一直无数据
+
+**根因**（详见 §5.6 InfluxDB 字段类型锁定机制）：
+
+1. 传感器把数值发成了字符串（如 `{"temperature":"25.6"}`），被存为 InfluxDB string 类型
+2. InfluxDB 铁律：同一 series（measurement + 完整 tag set）下同一 field 只能是单一类型，一旦写错就**永久锁死**
+3. 后续正确的数值写入会被 InfluxDB **静默拒绝**，writeApi 重试 3 次后丢弃，日志里几乎看不到
+4. 结果：库里只剩下早期那批 string 数据，`mean()` / `max()` 一查就报错
+
+**典型污染时间线**：
+
+```text
+T1  旧固件 bug → 发 {"voltage":"4.20"} → 存为 string 🔒
+T2  修好固件  → 发 {"voltage":4.25}   → 被 InfluxDB 拒绝（type conflict）
+T3  今天查询  → 只能命中 T1 的 string → mean() 报错 💥
+```
+
+**v2.1 自动缓解**：
+
+`src/services/fieldClassifier.ts` 里的 `NUMERIC_FIELD_HINTS` 白名单字段
+（temperature / humidity / battery / rssi / voltage / pm25 …）如果被误传成字符串，
+会自动强转为 float 并记 warn 日志，**从源头避免类型污染**。
+
+但注意：
+- 白名单只覆盖常见字段，自定义字段需手动加入
+- **历史已污染的数据不会自动修复**，需人工处理（见下方根治方案）
+- 非白名单字段（如 `status`）仍可能因固件变更而被污染
+
+**诊断步骤**：
+
+```bash
+# 1) 查看某字段实际存的类型分布
+influx query '
+  from(bucket: "myHeatDemo")
+    |> range(start: -24h)
+    |> filter(fn: (r) => r._measurement == "sensor_reading")
+    |> filter(fn: (r) => r._field == "temperature")
+    |> map(fn: (r) => ({ r with valueType: typeof(v: r._value) }))
+    |> group(columns: ["valueType", "device_id"])
+    |> count()
+    |> keep(columns: ["device_id", "valueType", "_value"])
+' --org UNITO-ORG --token '<INFLUX_TOKEN_已隐藏>'
+
+# 2) 查后端 warn 日志：定位哪台设备在发字符串
+sudo journalctl -u bun-mqtt-consumer --since "1 hour ago" -o cat \
+  | jq 'select(.msg | contains("已自动转为 float")) | {deviceId, field, raw}'
+
+# 3) 实时监听 field type conflict（新污染会立即暴露）
+sudo journalctl -u bun-mqtt-consumer -f -o cat \
+  | grep -iE "field type conflict|write.*fail|400"
+
+# 4) 开 debug 模式看完整 payload
+#   .env 里改 LOG_LEVEL=debug 后重启服务
+sudo systemctl restart bun-mqtt-consumer
+sudo journalctl -u bun-mqtt-consumer -f -o cat | jq 'select(.fields != null)'
+```
+
+**查询端应急方案**（数据已经被污染成 string 时，让图表先能出数）：
+
+```flux
+from(bucket: "myHeatDemo")
+  |> range(start: -1h)
+  |> filter(fn: (r) => r._field == "temperature")
+  |> toFloat()          // ← 强制把 string 转成 float；无法转的会变 NaN 被后续过滤
+  |> mean()
+```
+
+**根治方案**：
+
+1. **修传感器固件**：确保用 `cJSON_AddNumberToObject`，不要用 `cJSON_AddStringToObject`
+2. **清理污染数据**：如果 field 已经被锁死为 string，只能：
+   - `influx delete` 删掉受污染的 series（会丢历史数据）
+     ```bash
+     influx delete \
+       --bucket myHeatDemo \
+       --start 1970-01-01T00:00:00Z \
+       --stop 2030-01-01T00:00:00Z \
+       --predicate '_measurement="sensor_reading" AND _field="voltage" AND device_id="ESP32-7C2C6751DA00"' \
+       --org UNITO-ORG --token '<INFLUX_TOKEN_已隐藏>'
+     ```
+   - 或换一个新 bucket 从头开始收集（推荐 debug 阶段用）
+3. **扩展白名单**：如果发现新的数值字段被误传，把字段名加到
+   `src/services/fieldClassifier.ts` 的 `NUMERIC_FIELD_HINTS` 里，然后重启服务
+4. **加告警**：把 `field type conflict` 关键字加入日志监控（Promtail / Grafana Loki / Sentry），出现即通知
+
+**预防检查清单**（新设备上线前必看，也见 §5.6.7）：
+
+- [ ] payload 中的数值字段已加入 `NUMERIC_FIELD_HINTS` 白名单
+- [ ] 固件用 `cJSON_AddNumberToObject`，不用 `cJSON_AddStringToObject`
+- [ ] tag 字段（location / type）**每次都发**，避免 series 分裂
+- [ ] tag 字段值域**低基数**（不要把 timestamp / messageId 当 tag）
+- [ ] 首次上线先用 debug bucket 跑一批数据，确认无 field type conflict 再切生产
 
 ---
 
@@ -1299,5 +1597,6 @@ HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
 **文档结束。** 如有更新，请修改开头的版本号和日期。
 
 **变更历史**：
+- **v2.1**（2026-09-21）：字段类型智能处理。抽出 `src/services/fieldClassifier.ts` 纯函数模块；白名单里的数值字段被误传成字符串时自动强转为 float；`LOG_LEVEL=debug` 时打印完整 payload + 分类预览快照；新增 37 个 fieldClassifier 单测（累计 68 个）；文档新增 §5.6「InfluxDB 字段类型锁定机制」（Series 定义、污染时间线、监控命令、诊断 Flux 模板、预防检查清单）与 §12.7「字段类型问题」排查指南。
 - **v2.0**（2026-09-21）：生产级重构。新增 Zod 校验、Pino 日志、`/health` `/stats` 端点、LRU 消息去重、智能时间戳单位识别；入口从 `src/consumer.ts` 迁移至 `src/index.ts`；新增 debug 并行环境；补齐 31 个单元测试；`.env` 从 Git 索引中移除；文档格式从 txt 迁移至 Markdown。
 - **v1.0**（2026-09-18）：初版。

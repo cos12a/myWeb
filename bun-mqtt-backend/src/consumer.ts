@@ -2,7 +2,7 @@ import mqtt, { type MqttClient } from "mqtt";
 import { config } from "./config";
 import { logger } from "./logger";
 import { parseDeviceIdFromTopic, SensorPayloadSchema } from "./schema";
-import { writeSensorData } from "./services/sensorData";
+import { classifyPayload, writeSensorData } from "./services/sensorData";
 import { computeDedupKey, MessageDeduplicator } from "./dedup";
 
 /**
@@ -105,7 +105,31 @@ export function startConsumer(): MqttClient {
       logger.warn({ topic }, "无法确定 deviceId，仍将以 unknown 入库");
     }
 
-    // 5) 时间戳：payload 有就传下去，sensorData 里会做单位归一化
+    // 5) Debug 模式：打印完整数据日志（payload + 分类预览）
+    //    LOG_LEVEL=debug 或 trace 时生效，生产环境 info 级别下不会刷屏
+    if (logger.level === "debug" || logger.level === "trace") {
+      const preview = classifyPayload(data as Record<string, unknown>).map((c) => ({
+        field: c.key,
+        kind: c.kind,
+        value: c.kind === "skip" ? undefined : c.value,
+        ...(c.coerced ? { coercedFrom: c.raw } : {}),
+        ...(c.reason ? { reason: c.reason } : {}),
+      }));
+      logger.debug(
+        {
+          topic,
+          deviceId,
+          dedupKey,
+          dedupSource,
+          payload: data,
+          fields: preview,
+          rawLength: raw.length,
+        },
+        "📥 收到 MQTT 消息（debug 数据快照）",
+      );
+    }
+
+    // 6) 时间戳：payload 有就传下去，sensorData 里会做单位归一化
     const ts = typeof data.timestamp === "number" ? data.timestamp : undefined;
 
     try {
