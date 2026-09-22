@@ -1,9 +1,9 @@
 # IoT 传感器数据平台文档
 
-> **版本**：v2.1（字段类型智能处理版）
-> **最后更新**：2026-09-21
+> **版本**：v2.1（字段类型智能处理 + messageId 强制版）
+> **最后更新**：2026-09-22
 > **维护者**：yzluo
-> **重构说明**：本版本对应 `bun-mqtt-backend` v2.1，在 v2.0 基础上新增字段类型智能强转与 Debug 数据快照日志（Zod 校验 + Pino 结构化日志 + 健康检查端点 + LRU 消息去重 + 智能时间戳单位识别）。
+> **重构说明**：本版本对应 `bun-mqtt-backend` v2.1，在 v2.0 基础上新增字段类型智能强转、Debug 数据快照日志、以及 **`messageId` 强制携带规则**（防止 LRU 去重误杀慢变化字段），包含 Zod 校验 + Pino 结构化日志 + 健康检查端点 + LRU 消息去重 + 智能时间戳单位识别。
 > **凭据说明**：⚠️ 本文档中所有密码 / Token 均已用占位符遮蔽，实际值请从本地 `.env`（不入库）读取。
 
 ---
@@ -267,6 +267,29 @@ sudo journalctl -u mosquitto -f          # 实时日志
 | `string`（白名单字段且可解析为数字） | `float`（自动强转） | `temperature="25.6"` → `25.6` |
 | `object` / `array` / `function` / `bigint` | 跳过 | — |
 | `null` / `undefined` | 跳过 | — |
+
+**元字段黑名单（⭐ v2.1 新增）**：
+
+以下字段无论值是什么类型，**一律不写入 InfluxDB**（仅用于服务端路由 / 去重 / 时间戳），
+避免浪费存储与污染 field 类型空间：
+
+| 字段名 | 用途 | 不写入的原因 |
+|---|---|---|
+| `messageId` / `msgId` / `message_id` / `msg_id` / `uuid` / `id` | 服务端 LRU 去重计算 key | 已用于去重，再入库完全冗余 |
+| `timestamp` | Point 时间戳（索引） | 已由 `Point.timestamp()` 处理，再存 float field 是重复 |
+| `deviceId` | 已由 topic 解析为 `device_id` tag | payload 里重复携带无需再存 |
+
+定义在 `src/services/fieldClassifier.ts` 的 `SKIP_FIELDS` 常量，优先级高于
+`TAG_FIELDS` 与 `NUMERIC_FIELD_HINTS`（即使重名也一律 skip）。
+
+命中黑名单时会记 `debug` 日志（需 `LOG_LEVEL=debug` 才可见）：
+
+```json
+{"level":"debug","deviceId":"ESP32-001","field":"messageId","reason":"meta field (skip list)","msg":"跳过字段"}
+```
+
+> ⚠️ **不要往 `SKIP_FIELDS` 里加业务字段**（如 `status` / `firmware` / `name`），否则会丢数据。
+> 只限于 **确定不属于时序业务数据** 的元信息字段。
 
 **数值字段白名单**（v2.1 新增，定义在 `src/services/fieldClassifier.ts`）：
 
@@ -820,17 +843,27 @@ ps aux | grep 'bun.*src/index.ts' | grep -v grep
 | `online` 等布尔 | boolean | `booleanField` | 自动 |
 | `status` 等字符串 | string | `stringField` | 自动 |
 | `location` / `type` | string | **Tag**（索引） | 低基数字符串才适合当 tag |
-| `messageId` / `msgId` / `uuid` / `id` | string \| number | **去重键**（不入库） | v2.0 新增，强烈建议携带 |
-| `timestamp` | number | 时间戳（智能识别单位） | v2.0：秒/毫秒/微秒/纳秒都支持 |
-| `deviceId` | string | 备用 deviceId | topic 无法解析时才用 |
+| `messageId` / `msgId` / `uuid` / `id` | string \| number | ⭐ **v2.1 强制携带**；仅用于去重，**不入库** | 见 §5.2 元字段黑名单 + §12.8 |
+| `timestamp` | number | 时间戳（智能识别单位）；**不入库** | v2.0：秒/毫秒/微秒/纳秒都支持 |
+| `deviceId` | string | 备用 deviceId（topic 无法解析时才用）；**不入库** | 已由 topic 提取为 `device_id` tag |
 
 **去重行为**：
 
-| payload 情况 | 去重效果 |
-|---|---|
-| 带 `messageId` | 5 分钟内相同 ID 只入库一次 ✅ |
-| 无 ID 但内容完全相同 | `Bun.hash(topic+raw)` 相同 → 只入库一次 ✅ |
-| 无 ID 且内容每次不同 | 依赖 InfluxDB series+timestamp 内置去重（要求 payload 带 timestamp） |
+| payload 情况 | 去重效果 | 适用场景 |
+|---|---|---|
+| ✅ 带 `messageId`（唯一） | 每条都入库；只有相同 ID 才拦截 | **所有场景**（v2.1 强制） |
+| ⚠️ 无 ID + 内容完全相同 | `Bun.hash(topic+raw)` 命中 → **5 分钟内只入库一次** | 只适合快变化数据（如温度、PM2.5） |
+| 🔴 无 ID + 内容慢变化 | hash 反复命中 → **数据间歇性丢失** | 电压 / 电池电量 / RSSI 等 |
+| 无 ID + 每次都不同 | 依赖 InfluxDB series+timestamp 内置去重 | 要求 payload 带 timestamp |
+
+> ⚠️ **v2.1 强制规则**：所有传感器 payload **必须携带 `messageId`**。
+>
+> **原因**：v2.0 引入的 LRU + TTL 去重（默认 5 分钟窗口）在 payload 无 ID 时
+> 会退化为 `Bun.hash(topic + raw)` 判重，导致**慢变化数据被误杀**。
+> 典型症状：电压 / 电池电量 / 信号强度等字段「一下子有一下子没」，Grafana
+> 曲线出现锯齿状断点。详见 §12.8。
+>
+> **修复**：ESP32 固件加递增序号即可，代码 3 行（见 §9.4）。
 
 > **v1.0 旧警告已作废**：之前"不要传毫秒 timestamp"的限制在 v2.0 已通过智能单位识别解决，可放心传毫秒。
 
@@ -938,25 +971,48 @@ const esp_mqtt_client_config_t mqtt_cfg = {
 };
 ```
 
-### 9.4 上报数据（cJSON，v2.0 建议带 messageId）
+### 9.4 上报数据（cJSON，⭐ v2.1 强制携带 messageId）
+
+> **v2.1 硬性要求**：所有 payload **必须包含唯一 `messageId`**，否则慢变化字段
+> （voltage / battery / rssi …）会被服务端 LRU 去重误杀。详见 §8.2 与 §12.8。
+
+下面给出 3 种 messageId 生成策略，**按推荐度排序**，任选其一即可。
+
+#### 方案 A：MAC + 递增序号（⭐ 推荐，跨设备天然唯一，无需对时）
 
 ```c
+#include "cJSON.h"
+#include "esp_mac.h"
+#include "esp_timer.h"
+
 static uint32_t s_msg_seq = 0;
+static char     s_device_mac[18] = {0};   // "7C:2C:67:51:DA:00"
+
+static void init_device_mac(void) {
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    snprintf(s_device_mac, sizeof(s_device_mac),
+             "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
 
 static void publish_sensor_data(void) {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "temperature", read_temperature());
     cJSON_AddNumberToObject(root, "humidity",    read_humidity());
+    cJSON_AddNumberToObject(root, "voltage",     read_voltage());
     cJSON_AddStringToObject(root, "status",      "ok");
     cJSON_AddStringToObject(root, "location",    "living-room");
     cJSON_AddStringToObject(root, "type",        "dht22");
 
-    // ⭐ v2.0 推荐：加唯一 messageId，服务端 LRU 去重更精准
-    char msg_id[32];
-    snprintf(msg_id, sizeof(msg_id), "%s-%lu", DEVICE_ID, ++s_msg_seq);
+    // ⭐ v2.1 强制：messageId = MAC + 递增序号
+    char msg_id[48];
+    snprintf(msg_id, sizeof(msg_id), "%s-%lu",
+             s_device_mac, (unsigned long)(++s_msg_seq));
     cJSON_AddStringToObject(root, "messageId", msg_id);
+    // 结果示例："7C2C6751DA00-42"
 
-    // 可选：设备侧 timestamp（毫秒即可，服务端会自动识别单位）
+    // 可选：设备侧 timestamp（毫秒即可，服务端自动识别单位）
     cJSON_AddNumberToObject(root, "timestamp",
                             (double)(esp_timer_get_time() / 1000));
 
@@ -969,6 +1025,108 @@ static void publish_sensor_data(void) {
     cJSON_Delete(root);
 }
 ```
+
+**优点**：跨设备永不撞车、不依赖 NTP、重启后即使序号归零也不冲突（MAC 已足够唯一）。
+
+#### 方案 B：Unix 时间戳 + 递增序号（依赖 SNTP 对时）
+
+```c
+#include <time.h>
+#include <sys/time.h>
+
+// 初始化时启用 SNTP（一次性）
+static void init_sntp(void) {
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_setservername(1, "time.nist.gov");
+    esp_sntp_init();
+    setenv("TZ", "CST-8", 1);   // 东八区
+    tzset();
+}
+
+static uint32_t s_msg_seq = 0;
+
+static void publish_sensor_data(void) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "voltage", read_voltage());
+
+    // ⭐ messageId = Unix 秒 + 递增序号
+    time_t now = time(NULL);
+    char msg_id[32];
+    snprintf(msg_id, sizeof(msg_id), "%ld-%lu",
+             (long)now, (unsigned long)(++s_msg_seq));
+    cJSON_AddStringToObject(root, "messageId", msg_id);
+    // 结果示例："1758470400-42"
+
+    cJSON_AddNumberToObject(root, "timestamp", (double)(now * 1000));
+
+    // ... 发布逻辑同上 ...
+    cJSON_Delete(root);
+}
+```
+
+**优点**：即使设备重启，因为 Unix 时间不同，messageId 也不会撞车。
+**缺点**：需要 SNTP 对时；无网络时会退化。
+
+#### 方案 C：纯递增序号（最简单，够用）
+
+```c
+static uint32_t s_msg_seq = 0;
+
+static void publish_sensor_data(void) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "voltage", read_voltage());
+
+    // ⭐ messageId = 纯递增序号
+    cJSON_AddNumberToObject(root, "messageId", ++s_msg_seq);
+    // 结果示例：42（数值型，后端也能识别）
+
+    // ... 发布逻辑同上 ...
+    cJSON_Delete(root);
+}
+```
+
+**优点**：代码 1 行、无外部依赖、数值型 messageId 后端也支持。
+**缺点**：设备重启后从 0 开始，理论上 5 分钟内可能与重启前的序号撞车（实际概率极低，可忽略）。
+
+#### 三种方案对比
+
+| 方案 | 唯一性 | 重启后是否冲突 | 依赖 | 推荐度 |
+|---|---|---|---|---|
+| A：MAC + 序号 | 跨设备 + 跨重启 | ❌ 不冲突 | 无 | ⭐⭐⭐ |
+| B：时间戳 + 序号 | 跨设备 + 跨重启 | ❌ 不冲突 | SNTP | ⭐⭐ |
+| C：纯序号 | 单设备内 | ⚠️ 极低概率 | 无 | ⭐ |
+
+#### messageId 字段名兼容性
+
+后端 `computeDedupKey()` 按以下顺序识别 ID 字段，任一命中即用：
+
+```
+messageId  →  msgId  →  message_id  →  msg_id  →  uuid  →  id
+```
+
+值可以是 string 或有限 number，其他类型（bool / object / null）会被忽略并 fallback 到 hash。
+
+#### 上线前自检
+
+```bash
+# 抓 5 条自己设备发的原始 payload，检查 messageId 是否在递增
+mosquitto_sub -h <你的域名> -p 8883 --cafile ca.crt \
+  -u sensor_device -P '<传感器密码_已隐藏>' \
+  -t 'sensors/ESP32-7C2C6751DA00/#' -v -C 5
+```
+
+**期望输出**（每条 messageId 都不同）：
+
+```text
+sensors/ESP32-7C2C6751DA00/data {"messageId":"7C2C6751DA00-40","voltage":4.25}
+sensors/ESP32-7C2C6751DA00/data {"messageId":"7C2C6751DA00-41","voltage":4.25}
+sensors/ESP32-7C2C6751DA00/data {"messageId":"7C2C6751DA00-42","voltage":4.24}
+sensors/ESP32-7C2C6751DA00/data {"messageId":"7C2C6751DA00-43","voltage":4.24}
+sensors/ESP32-7C2C6751DA00/data {"messageId":"7C2C6751DA00-44","voltage":4.24}
+```
+
+如果 messageId 都相同或缺失 → 后端会误杀，务必修复。
 
 ### 9.5 接收指令
 
@@ -1341,6 +1499,117 @@ from(bucket: "myHeatDemo")
 - [ ] tag 字段（location / type）**每次都发**，避免 series 分裂
 - [ ] tag 字段值域**低基数**（不要把 timestamp / messageId 当 tag）
 - [ ] 首次上线先用 debug bucket 跑一批数据，确认无 field type conflict 再切生产
+- [ ] ⭐ **v2.1 强制**：payload 必须携带唯一 `messageId`（见 §12.8）
+
+### 12.8 慢变化数据间歇性丢失（v2.1 新增）
+
+**症状**：
+
+- Grafana 曲线上 voltage / battery / rssi 等慢变化字段**出现锯齿状断点**
+- 用户反馈「一下子好一下子不行」
+- 后端日志没有 error，MQTT 连接也正常
+- InfluxDB 里查该字段，发现数据点稀疏，每 5 分钟才有一条
+
+**根因**（v2.0 引入的 LRU + TTL 去重回归风险）：
+
+1. 传感器 payload 中**没有 `messageId`** 字段
+2. 后端 `computeDedupKey()` fallback 到 `Bun.hash(topic + raw)`
+3. 慢变化字段（如电压 4.25 保持几分钟不变）→ payload raw 完全一致 → hash 相同
+4. LRU 缓存 `DEDUP_TTL_MS=300000`（默认 5 分钟）内**全部判为重复并丢弃**
+5. 5 分钟后 key 过期 → 下一条又能入库 → 循环往复
+
+**污染时间线**：
+
+```text
+T=0s     {"voltage":4.25}          → hash=X → 首次入库 ✅
+T=30s    {"voltage":4.25}          → hash=X → dedup 命中 → 丢弃 ❌
+T=60s    {"voltage":4.25}          → hash=X → 丢弃 ❌
+T=90s    {"voltage":4.24}          → hash=Y → 值变了 → 入库 ✅
+T=120s   {"voltage":4.24}          → hash=Y → 丢弃 ❌
+T=300s   LRU 过期，所有 key 清空   → 下一条重新入库 ✅
+```
+
+**用户视角**：数据「间歇性丢失」，看起来像传感器不稳定，其实是后端去重误杀。
+
+**诊断步骤**：
+
+```bash
+# 1) 查 /stats 的 dedup 命中率
+curl -s http://127.0.0.1:9000/stats | jq '.dedup'
+```
+
+| 输出 | 结论 |
+|---|---|
+| `hitRate > 0.5` | 🔴 一半以上消息被去重丢弃，**基本可确诊** |
+| `hitRate 0.1 ~ 0.5` | ⚠️ 部分误杀，建议修复 |
+| `hitRate < 0.05` | ✅ 不是本问题，去查其他方向 |
+| `hits >> misses` | 🔴 严重误杀 |
+
+```bash
+# 2) 开 debug 日志，看被丢弃的具体消息
+sudo sed -i 's/^LOG_LEVEL=.*/LOG_LEVEL=debug/' /home/yzluo/myWeb/bun-mqtt-backend/.env
+sudo systemctl restart bun-mqtt-consumer
+sudo journalctl -u bun-mqtt-consumer -f -o cat \
+  | jq 'select(.msg | contains("重复") or contains("dedup"))'
+
+# 3) 直接抓 MQTT 原始 payload，看有没有 messageId
+mosquitto_sub -h 127.0.0.1 -u mqttuser -P '<mqttuser密码_已隐藏>' \
+  -t 'sensors/<DEVICE_ID>/#' -v -C 5
+```
+
+**修复方案**（按推荐度）：
+
+**方案 1：传感器加 messageId**（⭐ 一劳永逸，推荐）
+
+见 §9.4 的 3 种固件方案（MAC+序号 / 时间戳+序号 / 纯序号）。改完烧录，5 分钟后 `/stats` 的 `hitRate` 应回落到 < 0.05。
+
+**方案 2：临时关闭 dedup**（最快，但失去防重投能力）
+
+```bash
+sudo sed -i 's/^DEDUP_ENABLED=.*/DEDUP_ENABLED=false/' /home/yzluo/myWeb/bun-mqtt-backend/.env
+sudo systemctl restart bun-mqtt-consumer
+```
+
+⚠️ 关闭后 QoS 1 broker 重投会导致数据翻倍，仅作临时应急。
+
+**方案 3：缩短 TTL**（折中）
+
+```bash
+# 从 5 分钟缩短到 10 秒
+sudo sed -i 's/^DEDUP_TTL_MS=.*/DEDUP_TTL_MS=10000/' /home/yzluo/myWeb/bun-mqtt-backend/.env
+sudo systemctl restart bun-mqtt-consumer
+```
+
+只能拦截 10 秒内的 broker 重投（实际 MQTT QoS 1 重投通常在毫秒内），慢变化数据不会误杀。
+
+**验证修复成功**：
+
+```bash
+# 修复后跑 5 分钟，再次查 /stats
+curl -s http://127.0.0.1:9000/stats | jq '.dedup'
+
+# 期望：
+# - 若走方案 1：hits 增长缓慢，hitRate < 0.05
+# - 若走方案 2：enabled=false，hits/misses 都为 0
+# - 若走方案 3：hitRate 显著下降
+
+# InfluxDB 端验证：数据点密度恢复
+influx query '
+  from(bucket: "myHeatTest")
+    |> range(start: -10m)
+    |> filter(fn: (r) => r._field == "voltage")
+    |> count()
+' --org UNITO-ORG --token '<INFLUX_TOKEN_已隐藏>'
+# 期望 count ≈ 传感器上报频率 × 600 秒
+```
+
+**预防检查清单**（新传感器上线前必看）：
+
+- [ ] ⭐ payload 中携带唯一 `messageId`（string 或 number 均可）
+- [ ] messageId 生成策略见 §9.4（推荐 MAC + 序号）
+- [ ] 上线前 `mosquitto_sub` 抓 5 条原始 payload，确认 messageId 在递增
+- [ ] 上线后 5 分钟查 `/stats`，`hitRate` 应 < 0.05
+- [ ] 慢变化字段（voltage / battery / rssi）单独验证：连续 5 分钟值不变时仍应每次入库
 
 ---
 
@@ -1597,6 +1866,6 @@ HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
 **文档结束。** 如有更新，请修改开头的版本号和日期。
 
 **变更历史**：
-- **v2.1**（2026-09-21）：字段类型智能处理。抽出 `src/services/fieldClassifier.ts` 纯函数模块；白名单里的数值字段被误传成字符串时自动强转为 float；`LOG_LEVEL=debug` 时打印完整 payload + 分类预览快照；新增 37 个 fieldClassifier 单测（累计 68 个）；文档新增 §5.6「InfluxDB 字段类型锁定机制」（Series 定义、污染时间线、监控命令、诊断 Flux 模板、预防检查清单）与 §12.7「字段类型问题」排查指南。
+- **v2.1**（2026-09-22）：字段类型智能处理 + messageId 强制化 + 元字段黑名单。抽出 `src/services/fieldClassifier.ts` 纯函数模块；白名单里的数值字段被误传成字符串时自动强转为 float；`LOG_LEVEL=debug` 时打印完整 payload + 分类预览快照；**新增 `SKIP_FIELDS` 元字段黑名单**（`messageId` / `msgId` / `message_id` / `msg_id` / `uuid` / `id` / `timestamp` / `deviceId`）**一律不写入 InfluxDB**，避免存储浪费与 field 类型污染（新增 10 个单测，累计 78 pass / 0 fail）；文档新增 §5.6「InfluxDB 字段类型锁定机制」（Series 定义、污染时间线、监控命令、诊断 Flux 模板、预防检查清单）与 §12.7「字段类型问题」排查指南；**§8.2 / §9.4 将 `messageId` 从「强烈建议」升级为「强制要求」**（防 LRU 去重误杀慢变化字段），§9.4 补充 3 种 ESP32 固件生成策略（MAC+序号 / 时间戳+序号 / 纯序号）与上线自检命令；新增 §12.8「慢变化数据间歇性丢失」排查指南（诊断步骤 + 3 种修复方案 + 验证方法 + 预防清单）；§5.2 新增元字段黑名单说明表。
 - **v2.0**（2026-09-21）：生产级重构。新增 Zod 校验、Pino 日志、`/health` `/stats` 端点、LRU 消息去重、智能时间戳单位识别；入口从 `src/consumer.ts` 迁移至 `src/index.ts`；新增 debug 并行环境；补齐 31 个单元测试；`.env` 从 Git 索引中移除；文档格式从 txt 迁移至 Markdown。
 - **v1.0**（2026-09-18）：初版。

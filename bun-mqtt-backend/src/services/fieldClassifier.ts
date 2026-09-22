@@ -5,11 +5,32 @@
  * 在不触发 InfluxDB / Pino 副作用的情况下做单元测试。
  */
 
+import { DEDUP_ID_FIELDS } from "../dedup";
+
 /**
  * 会被识别为 Tag（索引字段）的 payload 键名。
  * Tag 必须低基数（少量唯一值），否则会导致 InfluxDB series 爆炸。
  */
 export const TAG_FIELDS = new Set(["location", "type"]);
+
+/**
+ * 元字段黑名单：这些字段 **不应写入 InfluxDB**，仅用于路由 / 去重 / 时间戳。
+ *
+ * 包括：
+ * - `DEDUP_ID_FIELDS`（messageId / msgId / message_id / msg_id / uuid / id）
+ *   → 仅用于服务端 LRU 去重计算 key，写入只会浪费存储 + 污染 field 类型空间
+ * - `timestamp` → 已由 `Point.timestamp()` 处理（写入后作为索引时间），
+ *   再当 float field 写一份完全冗余
+ * - `deviceId` → 已由 topic 解析并作为 `device_id` tag 写入，
+ *   payload 里重复携带无需再存
+ *
+ * ⚠️ 不要往这里加业务字段（如 `status` / `firmware`），否则会丢数据。
+ */
+export const SKIP_FIELDS: ReadonlySet<string> = new Set<string>([
+  ...DEDUP_ID_FIELDS,
+  "timestamp",
+  "deviceId",
+]);
 
 /**
  * 数值字段白名单：当 payload 里这些字段被误传成字符串（如 "25.6"）时，
@@ -61,6 +82,7 @@ export interface ClassifiedField {
  * 把一个 (key, value) 分类成 InfluxDB 里应该走的路径。
  *
  * 分类规则（按优先级）：
+ *   0. key ∈ SKIP_FIELDS                             → skip（v2.1 新增：元字段黑名单）
  *   1. null / undefined                              → skip
  *   2. key ∈ TAG_FIELDS 且是字符串                    → tag
  *   3. number（有限）                                 → float
@@ -73,6 +95,11 @@ export interface ClassifiedField {
  *   7. object / array / function / symbol / bigint   → skip
  */
 export function classifyField(key: string, value: unknown): ClassifiedField {
+  // ⭐ v2.1：元字段黑名单优先拦截，无论值类型一律 skip
+  if (SKIP_FIELDS.has(key)) {
+    return { kind: "skip", key, value: "", reason: "meta field (skip list)" };
+  }
+
   if (value === null || value === undefined) {
     return { kind: "skip", key, value: "", reason: "null/undefined" };
   }

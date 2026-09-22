@@ -120,8 +120,23 @@ export class MessageDeduplicator {
   }
 }
 
-/** payload 里可能作为唯一 ID 的字段名（按优先级） */
-const ID_FIELDS = ["messageId", "msgId", "message_id", "msg_id", "uuid", "id"] as const;
+/**
+ * payload 里可能作为唯一 ID 的字段名（按优先级）。
+ *
+ * 导出供 `services/fieldClassifier.ts` 复用：这些字段只用于计算 dedup key，
+ * 不应写入 InfluxDB（避免浪费存储与污染 field 类型空间）。
+ */
+export const DEDUP_ID_FIELDS = [
+  "messageId",
+  "msgId",
+  "message_id",
+  "msg_id",
+  "uuid",
+  "id",
+] as const;
+
+/** 内部别名，保持旧代码可读性 */
+const ID_FIELDS = DEDUP_ID_FIELDS;
 
 /**
  * 根据 topic + 原始 payload + 解析后的对象，计算去重键。

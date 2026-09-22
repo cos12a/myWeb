@@ -15,6 +15,7 @@ export {
   tryParseNumericString,
   TAG_FIELDS,
   NUMERIC_FIELD_HINTS,
+  SKIP_FIELDS,
   type ClassifiedField,
   type FieldKind,
 } from "./fieldClassifier";
@@ -27,6 +28,7 @@ export {
  * - location / type 作为 tag（低基数、常用作过滤）
  * - 数字 → floatField；布尔 → booleanField；字符串 → stringField
  * - 白名单里的数值字段如果被误传成字符串，会自动强转 + warn 日志
+ * - ⭐ v2.1：SKIP_FIELDS 黑名单字段（messageId / timestamp / deviceId 等）**不写入**
  * - 嵌套对象暂不处理
  *
  * 注意：writeApi 内部有批量缓冲，本函数不是"立即落库"。

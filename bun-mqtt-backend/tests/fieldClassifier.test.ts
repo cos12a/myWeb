@@ -5,7 +5,92 @@ import {
   tryParseNumericString,
   TAG_FIELDS,
   NUMERIC_FIELD_HINTS,
+  SKIP_FIELDS,
 } from "../src/services/fieldClassifier";
+import { DEDUP_ID_FIELDS } from "../src/dedup";
+
+describe("SKIP_FIELDS 元字段黑名单（v2.1）", () => {
+  test("包含所有 DEDUP_ID_FIELDS", () => {
+    for (const f of DEDUP_ID_FIELDS) {
+      expect(SKIP_FIELDS.has(f)).toBe(true);
+    }
+  });
+
+  test("包含 timestamp 与 deviceId", () => {
+    expect(SKIP_FIELDS.has("timestamp")).toBe(true);
+    expect(SKIP_FIELDS.has("deviceId")).toBe(true);
+  });
+
+  test("messageId / msgId / message_id / msg_id / uuid / id 均被 skip（无论值类型）", () => {
+    const keys = ["messageId", "msgId", "message_id", "msg_id", "uuid", "id"];
+    for (const k of keys) {
+      // 字符串值
+      const s = classifyField(k, "abc-123");
+      expect(s.kind).toBe("skip");
+      expect(s.reason).toContain("meta field");
+      // 数值（如递增序号）
+      const n = classifyField(k, 42);
+      expect(n.kind).toBe("skip");
+      // null / undefined 也归为 skip
+      expect(classifyField(k, null).kind).toBe("skip");
+      expect(classifyField(k, undefined).kind).toBe("skip");
+    }
+  });
+
+  test("timestamp 被 skip（避免与 Point.timestamp() 冗余）", () => {
+    const r = classifyField("timestamp", 1758470400000);
+    expect(r.kind).toBe("skip");
+    expect(r.reason).toContain("meta field");
+  });
+
+  test("deviceId 被 skip（已由 topic 解析为 device_id tag）", () => {
+    const r = classifyField("deviceId", "ESP32-7C2C6751DA00");
+    expect(r.kind).toBe("skip");
+  });
+
+  test("黑名单优先于 TAG_FIELDS：即使重名也不当 tag", () => {
+    // 假设未来有人不小心把 id 加到 TAG_FIELDS，黑名单仍应优先
+    const r = classifyField("id", "living-room");
+    expect(r.kind).toBe("skip");
+  });
+
+  test("黑名单优先于 NUMERIC_FIELD_HINTS：数值字段名命中黑名单仍被 skip", () => {
+    // 构造一个假想场景：如果有人把 "id" 也加到 NUMERIC_FIELD_HINTS，
+    // 黑名单仍应优先拦截，避免强转后入库
+    const r = classifyField("id", "12345");
+    expect(r.kind).toBe("skip");
+  });
+
+  test("非黑名单字段不受影响：业务字段正常入库", () => {
+    expect(classifyField("voltage", 4.25).kind).toBe("float");
+    expect(classifyField("status", "ok").kind).toBe("string");
+    expect(classifyField("location", "kitchen").kind).toBe("tag");
+    expect(classifyField("online", true).kind).toBe("boolean");
+  });
+
+  test("classifyPayload 混合场景：黑名单字段全 skip，业务字段正常分类", () => {
+    const result = classifyPayload({
+      messageId: "7C2C6751DA00-42",
+      timestamp: 1758470400000,
+      deviceId: "ESP32-7C2C6751DA00",
+      voltage: 4.25,
+      status: "ok",
+      location: "living-room",
+    });
+    const kinds = Object.fromEntries(result.map((r) => [r.key, r.kind]));
+    expect(kinds.messageId).toBe("skip");
+    expect(kinds.timestamp).toBe("skip");
+    expect(kinds.deviceId).toBe("skip");
+    expect(kinds.voltage).toBe("float");
+    expect(kinds.status).toBe("string");
+    expect(kinds.location).toBe("tag");
+  });
+
+  test("SKIP_FIELDS 不可被意外修改（只读集合语义）", () => {
+    // 确认 SKIP_FIELDS 是 Set 实例且包含预期数量的字段
+    expect(SKIP_FIELDS.size).toBeGreaterThanOrEqual(8); // 6 个 ID + timestamp + deviceId
+  });
+});
 
 describe("tryParseNumericString", () => {
   test("解析正常数字字符串", () => {
@@ -242,7 +327,8 @@ describe("classifyPayload", () => {
       location: "living-room",    // tag
       type: "dht22",              // tag
       meta: { nested: true },     // 跳过
-      timestamp: 1758470400000,   // float（虽然实际用作时间戳，但分类器不管语义）
+      timestamp: 1758470400000,   // ⭐ v2.1：已列入 SKIP_FIELDS，归为 skip
+      messageId: "abc-123",       // ⭐ v2.1：已列入 SKIP_FIELDS，归为 skip
     };
     const results = classifyPayload(payload);
     const byKey = Object.fromEntries(results.map((r) => [r.key, r]));
@@ -259,7 +345,11 @@ describe("classifyPayload", () => {
     expect(byKey.location!.kind).toBe("tag");
     expect(byKey.type!.kind).toBe("tag");
     expect(byKey.meta!.kind).toBe("skip");
-    expect(byKey.timestamp!.kind).toBe("float");
+    // v2.1：timestamp 与 messageId 已列入 SKIP_FIELDS，不再写入 InfluxDB
+    expect(byKey.timestamp!.kind).toBe("skip");
+    expect(byKey.timestamp!.reason).toContain("meta field");
+    expect(byKey.messageId!.kind).toBe("skip");
+    expect(byKey.messageId!.reason).toContain("meta field");
   });
 
   test("空 payload 返回空数组", () => {
