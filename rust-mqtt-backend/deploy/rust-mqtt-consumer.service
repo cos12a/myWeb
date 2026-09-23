@@ -1,0 +1,42 @@
+[Unit]
+Description=Rust MQTT Consumer (rust-mqtt-backend)
+Documentation=https://github.com/cos12a/myWeb
+# 等网络就绪后再启动；若 MQTT/InfluxDB 在本机，可加 mosquitto.service influxdb.service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 运行用户（改成你的实际用户）
+User=yzluo
+Group=yzluo
+WorkingDirectory=/opt/rust-mqtt-backend
+# 二进制 + 配置文件路径（--env-file 用绝对路径最稳妥）
+ExecStart=/opt/rust-mqtt-backend/rust-mqtt-consumer --env-file=/opt/rust-mqtt-backend/.env
+
+# 崩溃自动重启
+Restart=always
+RestartSec=3
+
+# 日志走 journald（程序本身输出 JSON 到 stdout）
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rust-mqtt-consumer
+
+# ---------- 安全加固 ----------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# 程序只读 .env 与二进制，不写磁盘；如需写入可加 ReadWritePaths=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# 资源限制（2 核小机器足够）
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

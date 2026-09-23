@@ -1,0 +1,48 @@
+[package]
+name = "rust-mqtt-backend"
+version = "2.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Rust rewrite of bun-mqtt-backend: MQTT -> dedup/classify/normalize -> InfluxDB 2.x"
+
+[[bin]]
+name = "rust-mqtt-consumer"
+path = "src/main.rs"
+
+[features]
+# 默认启用 rustls（HTTPS 写入 InfluxDB / mqtts 连接 Broker），行为对齐 HANDOFF 3.2。
+# rustls 依赖 ring 的 C/asm 代码：交叉编译到 musl 时需要 x86_64-linux-musl-gcc
+# （见 HANDOFF 8.2：x86_64 构建机 apt-get install musl-tools）。
+default = ["rustls-tls"]
+# 关闭默认特性（--no-default-features）后为纯 Rust 构建（仅 http:// + 明文 mqtt://），
+# 不含 ring，无需任何 C 交叉工具链，用 rust-lld 即可产出 x86_64-unknown-linux-musl 静态二进制。
+# 适用于本机 http://127.0.0.1:8086 InfluxDB + mqtt://127.0.0.1:1883（见 HANDOFF 1.4）。
+rustls-tls = ["reqwest/rustls-tls", "rumqttc/use-rustls"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+rumqttc = { version = "0.24", default-features = false }
+axum = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dotenvy = "0.15"
+lru = "0.12"
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
+anyhow = "1"
+thiserror = "1"
+reqwest = { version = "0.12", default-features = false }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+once_cell = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
