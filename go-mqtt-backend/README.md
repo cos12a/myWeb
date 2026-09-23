@@ -6,6 +6,25 @@
 
 ---
 
+## 📚 文档导航
+
+文档按职责拆分为三份，各取所需：
+
+| 文档 | 面向 | 内容 |
+|---|---|---|
+| **README.md**（本文） | 所有人 | 项目概览、特性、目录结构、技术栈、5 分钟上手 |
+| **[USAGE.md](USAGE.md)** | 使用者 / 运维 | 本地运行、环境变量、命令表、**数据处理规则**（分类器 / 黑名单 / 时间戳 / 去重）、健康端点、测试、FAQ |
+| **[DEPLOY.md](DEPLOY.md)** | 构建 / 上线 | 编译（本地/交叉/服务器）、**云端 git 部署**、systemd、更新与回滚、Bun→Go 并行迁移与切换、行为差异、部署坑 |
+
+**我想……**
+- 在本地跑起来 → [USAGE.md 第 2 节](USAGE.md#2-快速开始本地运行)
+- 搞懂某个字段为什么没入库 → [USAGE.md 第 6 节 数据处理规则](USAGE.md#6-数据处理规则核心)
+- 部署到云服务器 → [DEPLOY.md 第 2 节 云端部署](DEPLOY.md#2-云端部署git-拉取式推荐)
+- 更新已上线的服务 → [DEPLOY.md 第 4 节 更新流程](DEPLOY.md#4-更新流程与回滚)
+- 从 Bun 版平滑切换 → [DEPLOY.md 第 5-6 节](DEPLOY.md#5-并行双跑迁移bun--go)
+
+---
+
 ## 特性对齐（v2.1）
 
 | 特性 | 说明 |
@@ -21,83 +40,23 @@
 
 ---
 
-## 快速开始
+## 5 分钟上手
 
-### 1. 环境要求
-- Go **1.22+**（开发环境验证于 1.27.1）
-- 可访问的 MQTT Broker 与 InfluxDB 2.x
-
-### 2. 配置
 ```bash
-cp .env.example .env          # 生产
-cp .env.debug.example .env.debug   # 调试（独立 bucket/clientId/port）
-chmod 600 .env .env.debug     # Linux 下收紧权限
-```
-> `.env` / `.env.debug` 已被 gitignore，**绝不入库**。
+# 1) 配置
+cp .env.example .env && nano .env    # 填 MQTT / InfluxDB 密钥
 
-### 3. 运行
-```bash
-make tidy          # 拉取依赖
-make test          # 单元测试（73 个测试函数）
-make run           # 生产模式（读 .env）
-make run-debug     # 调试模式（读 .env.debug，LOG_LEVEL=debug）
-```
+# 2) 拉依赖 + 测试
+make tidy && make test
 
-### 4. 编译
-```bash
-make build         # Linux amd64 静态二进制 → bin/go-mqtt-consumer
-make build-local   # 本机（Windows）二进制 → bin/go-mqtt-consumer.exe
-```
+# 3) 运行
+make run                             # 或 make run-debug（调试模式）
 
-### 5. 验证
-```bash
-# 健康检查
+# 4) 验证（另开终端）
 curl http://localhost:9002/health
-# 运行时统计
-curl http://localhost:9002/stats
-
-# 发一条测试消息
-mosquitto_pub -h 127.0.0.1 -p 1883 -u <user> -P <pass> \
-  -t "sensors/ESP32-TEST/data" \
-  -m '{"messageId":"t-001","temperature":25.6,"humidity":"60.2","location":"lab","online":true}'
 ```
 
----
-
-## 命令表（Makefile）
-
-| 命令 | 作用 |
-|---|---|
-| `make build` | 交叉编译 Linux amd64 生产二进制（`-s -w` 去符号） |
-| `make build-local` | 编译本机开发二进制 |
-| `make test` | 运行全部单元测试（`-v -count=1`） |
-| `make test-cover` | 测试 + 生成 HTML 覆盖率报告 |
-| `make lint` | `golangci-lint`（需先安装） |
-| `make run` | 用 `.env` 启动 |
-| `make run-debug` | 用 `.env.debug` 启动 |
-| `make tidy` | `go mod tidy` |
-| `make clean` | 清理编译产物 |
-
----
-
-## 环境变量
-
-| 变量 | 必填 | 默认 | 说明 |
-|---|---|---|---|
-| `MQTT_URL` | ✅ | — | 如 `mqtt://127.0.0.1:1883` |
-| `MQTT_USER` | ✅ | — | MQTT 用户名 |
-| `MQTT_PASS` | ✅ | — | MQTT 密码 |
-| `MQTT_CLIENT_ID` | | `go-mqtt-consumer` | **并行跑时必须与 Bun 版不同** |
-| `MQTT_SUBSCRIBE_TOPIC` | | `sensors/#` | 订阅主题 |
-| `INFLUX_URL` | ✅ | — | 如 `http://127.0.0.1:8086` |
-| `INFLUX_TOKEN` | ✅ | — | InfluxDB API Token |
-| `INFLUX_ORG` | ✅ | — | 组织名 |
-| `INFLUX_BUCKET` | ✅ | — | **并行跑时必须与 Bun 版不同** |
-| `LOG_LEVEL` | | `info` | `debug/info/warn/error/fatal` |
-| `HEALTH_PORT` | | `9002` | 健康端点端口 |
-| `DEDUP_ENABLED` | | `true` | 是否启用去重 |
-| `DEDUP_MAX_SIZE` | | `10000` | LRU 最大条目（100~1000000） |
-| `DEDUP_TTL_MS` | | `300000` | 去重窗口毫秒（1000~3600000） |
+详见 [USAGE.md](USAGE.md)。上线部署详见 [DEPLOY.md](DEPLOY.md)。
 
 ---
 
@@ -116,89 +75,37 @@ go-mqtt-backend/
 │   ├── timestamp/              # 智能时间戳归一化               (normalize_test.go)
 │   ├── sensor/                 # payload → InfluxDB Point
 │   └── health/                 # /health /stats HTTP 端点
+├── deploy/
+│   └── go-mqtt-consumer.service   # 加固版 systemd unit
 ├── .env.example / .env.debug.example
-├── Makefile / go.mod / README.md
+├── Makefile / go.mod / go.sum
+├── README.md                  # 本文：入口导航
+├── USAGE.md                   # 使用说明
+└── DEPLOY.md                  # 编译与部署
 ```
 
 ---
 
-## 并行双跑迁移（Bun → Go）
+## 技术栈
 
-Go 版用**独立 bucket + 独立 clientId + 独立端口**，与 Bun 版互不干扰：
+| 职责 | 库 |
+|---|---|
+| MQTT 客户端 | `github.com/eclipse/paho.mqtt.golang` v1.5 |
+| InfluxDB 写入 | `github.com/influxdata/influxdb-client-go/v2` v2.14 |
+| 结构化日志 | `go.uber.org/zap` v1.28 |
+| LRU 缓存 | `github.com/hashicorp/golang-lru/v2` v2.0 |
+| Hash（dedup fallback） | `github.com/cespare/xxhash/v2` v2.3 |
+| .env 加载 | `github.com/joho/godotenv` v1.5 |
+| HTTP 服务 | `net/http` 标准库 |
+| 测试断言 | `github.com/stretchr/testify` v1.8 |
 
-| 隔离点 | Bun 版 | Go 版 |
-|---|---|---|
-| clientId | `bun-mqtt-consumer` | `go-mqtt-consumer` |
-| bucket | `myHeatTest` | `myHeatTestGo`（debug: `myHeatTestGoDebug`） |
-| health port | `9000` | `9002`（debug: `9003`） |
-
-> MQTT 是广播语义：两个 clientId 各收一份完整消息，两边独立去重、独立落库，互不影响。
-
-**验证周期（24-48h）** — 对比数据条数一致性：
-```flux
-from(bucket: "myHeatTest")   |> range(start: -24h) |> count()   // Bun
-from(bucket: "myHeatTestGo") |> range(start: -24h) |> count()   // Go
-```
-关注：数据条数一致 / 字段类型一致 / dedup hitRate 接近 / 无 error 日志。
-
----
-
-## 生产部署（systemd）
-
-```ini
-[Unit]
-Description=Go MQTT Consumer
-After=network-online.target mosquitto.service influxdb.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=mqtt
-WorkingDirectory=/opt/go-mqtt-backend
-ExecStart=/opt/go-mqtt-backend/bin/go-mqtt-consumer --env-file=/opt/go-mqtt-backend/.env
-Restart=always
-RestartSec=3
-# 安全加固
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/go-mqtt-backend
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now go-mqtt-consumer
-sudo systemctl status go-mqtt-consumer
-journalctl -u go-mqtt-consumer -f
-```
-
-**从 Bun 版切换**（确认 48h 数据一致后）：
-1. 改 Go 版 `.env` 的 `INFLUX_BUCKET` 为生产 bucket（`myHeatTest`）、`MQTT_CLIENT_ID` 为生产值
-2. `sudo systemctl stop bun-mqtt-consumer`
-3. `sudo systemctl start go-mqtt-consumer`
-4. 验证数据继续落库 → `sudo systemctl disable bun-mqtt-consumer`
-5. 观察 1 周无问题后移除 Bun 版
-
----
-
-## 与 Bun 版的行为差异（迁移须知）
-
-1. **dedup hash 不兼容**：Bun 用 `wyhash`，Go 用 `xxhash` — 无 ID 时的 fallback hash key 两边不同。并行跑各自独立去重，互不影响，但**跨版本对比 hash key 无意义**。带 `messageId` 时两边 key 一致（`id:messageId:xxx`）。
-2. **map 遍历顺序**：Go map 无序，`ClassifyPayload` 已按 key 字典序排序以保证稳定输出。
-3. **JSON number**：Go `json.Unmarshal` 到 `any` 时数字统一为 `float64`（与 TS `number` 行为一致）。
-4. **时间戳精度**：Go fallback 用 `time.Now().UnixNano()`（纳秒），比 Bun 的 `Date.now()`（毫秒）更精确。
+Go 版本要求：**1.22+**（开发验证于 1.27.1）。
 
 ---
 
 ## 测试
 
 ```bash
-make test          # 73 个测试函数，覆盖 classifier/dedup/timestamp
+make test          # 73 个测试函数，覆盖 classifier / dedup / timestamp
 make test-cover    # 覆盖率：classifier 80% / dedup 97% / timestamp 100%
 ```
-
-测试用例从 `bun-mqtt-backend/tests/*.test.ts` 逐条移植，行为语义对齐。
