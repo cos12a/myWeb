@@ -124,12 +124,16 @@ fn handle_message(
                 })
             })
             .collect();
+        // ⚠️ 用 %（Display）打印序列化后的 JSON，而非 ?（Debug）——
+        // 否则 serde_json::Value 会渲染成 Rust 的 Debug 形式
+        // （Object {..} / Bool(..) / String(..) / Null），像报错 dump，且与 go 版 zap.Any 的干净 JSON 不一致。
+        let fields_json = serde_json::to_string(&fields).unwrap_or_else(|_| "[]".to_string());
         debug!(
             topic = %topic,
             deviceId = %device_id,
             dedupKey = %dk.key,
             payload = %value,
-            fields = ?fields,
+            fields = %fields_json,
             "收到传感器数据"
         );
     }
