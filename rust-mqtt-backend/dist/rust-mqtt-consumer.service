@@ -1,0 +1,63 @@
+# ==========================================================================
+#  rust-mqtt-consumer — systemd 服务单元（dist 参考模板）
+# ==========================================================================
+#  用途：让程序在 Debian/Ubuntu 上开机自启、崩溃自愈、后台常驻。
+#  推荐：直接跑同目录的 `sudo ./install-debian.sh`，它会按你的实际用户/路径
+#        自动生成并安装本单元，无需手改。
+#  手动：若要用本模板，请先把下面 User/Group 改成你的实际账号，再：
+#        sudo cp rust-mqtt-consumer.service /etc/systemd/system/
+#        sudo systemctl daemon-reload
+#        sudo systemctl enable --now rust-mqtt-consumer
+# ==========================================================================
+
+[Unit]
+Description=Rust MQTT Consumer (rust-mqtt-backend)
+Documentation=https://github.com/cos12a/myWeb
+# 等网络就绪后再启动；若 MQTT/InfluxDB 也在本机，可追加依赖：
+#   After=network-online.target mosquitto.service influxdb.service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ⚠️ 改成你的实际运行账号（install-debian.sh 会自动创建专用系统用户 rustmqtt）
+User=rustmqtt
+Group=rustmqtt
+# 安装目录（二进制 + .env 都在这里）
+WorkingDirectory=/opt/rust-mqtt-backend
+# 用绝对路径指定二进制与配置文件，最稳妥
+ExecStart=/opt/rust-mqtt-backend/rust-mqtt-consumer --env-file=/opt/rust-mqtt-backend/.env
+
+# 崩溃/异常退出后自动重启（间隔 3s），保证持续运行
+Restart=always
+RestartSec=3
+
+# 程序把 JSON 日志打到 stdout/stderr → 交给 journald 收集
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rust-mqtt-consumer
+
+# 优雅关闭：先发 SIGTERM，最多等 10s（程序内部 5s 兜底强制退出）
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# ---------- 安全加固（最小权限）----------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+# 只允许网络相关地址族（本程序仅需 TCP 连 MQTT/InfluxDB + 监听健康端口）
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# 程序只读 .env 与二进制、不写磁盘；如确需写入可加 ReadWritePaths=
+
+# 资源限制（2 核小机器足够）
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
