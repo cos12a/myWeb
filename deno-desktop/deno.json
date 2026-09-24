@@ -1,0 +1,29 @@
+{
+  "name": "deno-desktop",
+  "version": "1.0.0",
+  "exports": "./desktop.ts",
+  "tasks": {
+    "start": "deno run --allow-net --allow-read --allow-env main.ts",
+    "desktop": "deno run --allow-net --allow-read --allow-env --allow-run desktop.ts",
+    "compile": "deno compile --allow-net --allow-read --allow-env --allow-run --output bin/deno-desktop desktop.ts",
+    "dev": "deno run --watch --allow-net --allow-read --allow-env --allow-run desktop.ts",
+    "check": "deno check main.ts desktop.ts",
+    "fmt": "deno fmt",
+    "lint": "deno lint"
+  },
+  "imports": {
+    "hono": "jsr:@hono/hono@4.13.8",
+    "hono/deno": "jsr:@hono/hono@4.13.8/deno",
+    "hono/logger": "jsr:@hono/hono@4.13.8/logger"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "dom", "esnext"],
+    "strict": true
+  },
+  "fmt": {
+    "exclude": ["static/"]
+  },
+  "lint": {
+    "exclude": ["static/"]
+  }
+}

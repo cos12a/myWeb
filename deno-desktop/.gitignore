@@ -1,0 +1,19 @@
+# 环境变量（含密钥，绝不入库）
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+logs/
+
+# 系统/编辑器
+.DS_Store
+.idea
+.vscode
+
+# Deno 构建/缓存产物（deno.lock 需入库以保证可复现，故不忽略）
+deno.lock.backup
+
+# deno compile 产物（体积大，不入库）
+bin/

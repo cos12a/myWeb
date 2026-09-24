@@ -1,0 +1,17 @@
+{
+  "name": "Web Serial Plotter",
+  "short_name": "Serial Plotter",
+  "description": "Real-time plotting of data from Arduino devices over the Web Serial API.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
+

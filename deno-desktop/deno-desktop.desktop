@@ -1,0 +1,15 @@
+[Desktop Entry]
+# Linux 桌面菜单启动器模板。
+# 用法：把下面的 Exec / Icon 改成你的绝对路径，然后：
+#   cp deno-desktop.desktop ~/.local/share/applications/
+# 之后即可在应用菜单里点击启动（会拉起本地服务并自动打开浏览器）。
+Type=Application
+Version=1.0
+Name=MyWeb Desktop
+Comment=Deno + Hono 物联网展示桌面应用
+# ⚠️ 改成可执行文件的绝对路径，例如 /home/you/MyWebDesktop/deno-desktop
+Exec=/absolute/path/to/deno-desktop
+# ⚠️ 改成图标绝对路径（可选），例如 /home/you/MyWebDesktop/static/public/icons/pwa-192x192.png
+Icon=/absolute/path/to/icon.png
+Terminal=true
+Categories=Utility;Development;

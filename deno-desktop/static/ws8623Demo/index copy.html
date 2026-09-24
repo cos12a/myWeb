@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLE NUS 配对测试</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 16px; color: #e94560; }
+  .card { background: #16213e; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .status-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #555; transition: background .3s; }
+  .dot.idle { background: #555; }
+  .dot.selecting { background: #f0a500; animation: pulse 1s infinite; }
+  .dot.connecting, .dot.pairing { background: #0f3460; animation: pulse .6s infinite; }
+  .dot.paired { background: #00b894; }
+  .dot.error { background: #e94560; }
+  .dot.disconnected { background: #636e72; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+  .status-text { font-size: .95rem; }
+  .error-msg { color: #ff6b6b; font-size: .85rem; margin-top: 6px; min-height: 1.2em; }
+  button { background: #0f3460; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: .9rem; margin-right: 8px; margin-bottom: 8px; transition: background .2s; }
+  button:hover:not(:disabled) { background: #e94560; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.danger { background: #636e72; }
+  input[type="text"] { background: #0f3460; border: 1px solid #333; color: #eee; padding: 8px 12px; border-radius: 8px; width: 100%; margin-bottom: 8px; font-family: monospace; }
+  .log-box { background: #0d1117; border-radius: 8px; padding: 12px; height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: .8rem; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+  .log-line { border-bottom: 1px solid #161b22; padding: 2px 0; }
+  .log-line.rx { color: #00b894; }
+  .log-line.tx { color: #74b9ff; }
+  .log-line.err { color: #ff6b6b; }
+  .log-line.info { color: #dfe6e9; }
+  .hint { background: #2d1b00; border-left: 3px solid #f0a500; padding: 10px 14px; border-radius: 0 8px 8px 0; margin-bottom: 16px; font-size: .85rem; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<h1>🔗 BLE NUS 配对功能测试</h1>
+
+<div class="hint">
+  ⚠️ <strong>使用前必读：</strong><br>
+  1. 仅 <strong>Chrome / Edge (桌面或 Android)</strong> 支持 Web Bluetooth<br>
+  2. 若设备要求 Passkey 配对，请留意 <strong>系统蓝牙弹窗</strong>（非浏览器内）<br>
+  3. 首次测试建议先在 ESP32 固件中将 <code>encrypted</code> 设为 <code>false</code> 排除配对问题
+</div>
+
+<div class="card">
+  <div class="status-bar">
+    <div class="dot idle" id="statusDot"></div>
+    <span class="status-text" id="statusText">idle</span>
+  </div>
+  <div class="error-msg" id="errorMsg"></div>
+  <div style="margin-top: 12px;">
+    <button id="btnConnect">① 选择并连接设备</button>
+    <button id="btnDisconnect" class="danger" disabled>断开</button>
+    <button id="btnForget" class="danger" disabled>忘记设备</button>
+  </div>
+</div>
+
+<div class="card">
+  <input type="text" id="txInput" placeholder="输入要发送的文本（回车发送）" disabled />
+  <button id="btnSend" disabled>发送</button>
+  <button id="btnClearLog" class="danger">清空日志</button>
+</div>
+
+<div class="log-box" id="logBox"></div>
+
+<!-- ✅ 将你的 BleController 编译产物以 ES Module 形式引入 -->
+<!-- 如果无法直接导入，下方提供了内联的精简版 BleController 用于测试 -->
+<script type="module">
+const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_TX      = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_RX      = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const PAIR_TIMEOUT_MS = 30000;
+
+class BleController {
+  constructor(host, cb = {}) {
+    this.host = host;
+    this.cb = cb;
+    this.device = null;
+    this.server = null;
+    this.txChar = null;
+    this.rxChar = null;
+    this.rxBuf = "";
+    this.decoder = new TextDecoder();
+    this.encoder = new TextEncoder();
+    this.onDisconnectedBound = () => this.onDisconnected();
+    this.status = "idle";
+    this.errorMessage = null;
+    host.addController(this);
+  }
+
+  get connected() { return !!this.device && !!this.device.gatt && this.device.gatt.connected; }
+  hostConnected() {}
+  hostDisconnected() { void this.disconnect(); }
+
+  set(status, error = null) {
+    this.status = status;
+    this.errorMessage = error;
+    this.cb.onStatus?.(status, error);
+    this.host.requestUpdate();
+  }
+
+  cleanup() { this.server = null; this.txChar = null; this.rxChar = null; this.rxBuf = ""; }
+
+  describeError(err) {
+    if (err instanceof DOMException) {
+      switch (err.name) {
+        case "SecurityError": return "配对失败或被取消，请重新配对";
+        case "NetworkError": return "连接中断，请重试";
+        case "NotFoundError": return "未找到服务或特征，请检查 UUID";
+        case "NotSupportedError": return "设备不支持该操作";
+        case "InvalidStateError": return "GATT 未连接";
+      }
+    }
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  withTimeout(p, ms, msg) {
+    return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+  }
+
+  async pickDevice(namePrefix) {
+    if (!navigator.bluetooth) throw new Error("当前浏览器不支持 Web Bluetooth");
+    this.set("selecting");
+    const reqOpts = { optionalServices: [NUS_SERVICE] };
+    if (namePrefix) reqOpts.filters = [{ namePrefix }];
+    else reqOpts.acceptAllDevices = true;
+    try {
+      this.device = await navigator.bluetooth.requestDevice(reqOpts);
+      this.device.removeEventListener("gattserverdisconnected", this.onDisconnectedBound);
+      this.device.addEventListener("gattserverdisconnected", this.onDisconnectedBound);
+    } catch (err) { this.set("idle"); throw err; }
+  }
+
+  async connectGatt() {
+    if (!this.device) throw new Error("未选择设备");
+    this.set("connecting");
+    log("info", `[BLE] connectGatt: 调用 gatt.connect()`);
+    try {
+      this.server = await this.device.gatt.connect();
+      log("info", `[BLE] connectGatt: connected=${this.device.gatt?.connected}`);
+    } catch (err) {
+      log("err", `[BLE] connectGatt 失败: ${this.describeError(err)}`);
+      this.set("error", this.describeError(err)); throw err;
+    }
+  }
+
+  async discoverServices() {
+    if (!this.server) throw new Error("未连接");
+    this.set("pairing");
+    log("info", `[BLE] discoverServices: 开始`);
+    try {
+      const svc = await this.withTimeout(this.server.getPrimaryService(NUS_SERVICE), PAIR_TIMEOUT_MS, "获取服务超时");
+      this.txChar = await this.withTimeout(svc.getCharacteristic(NUS_TX), PAIR_TIMEOUT_MS, "获取TX超时");
+      this.rxChar = await this.withTimeout(svc.getCharacteristic(NUS_RX), PAIR_TIMEOUT_MS, "获取RX超时");
+      log("info", `[BLE] 特征获取成功，准备 startNotifications`);
+      await this.startNotificationsWithPairRetry(this.rxChar);
+      log("info", `[BLE] startNotifications 成功 ✅`);
+      this.rxChar.addEventListener("characteristicvaluechanged", (e) => this.onNotify(e));
+    } catch (err) {
+      log("err", `[BLE] discoverServices 失败: ${err.message || err}`);
+      this.set("error", this.describeError(err)); throw err;
+    }
+    this.set("paired");
+  }
+
+  // ⭐ 修复版：去掉 private 关键字 + 修复 continue 死循环
+  async startNotificationsWithPairRetry(char) {
+    const deadline = Date.now() + PAIR_TIMEOUT_MS;
+    let attempt = 0;
+    let pairingTriggered = false;
+
+    while (Date.now() < deadline) {
+      if (!this.server?.connected) throw new Error("连接已断开");
+      attempt++;
+
+      try {
+        console.log(`[BLE] startNotifications #${attempt}, pairingTriggered=${pairingTriggered}`);
+        // 配对触发后给单次操作更长的超时时间，让 OS 有足够时间完成弹窗交互
+        const singleTimeout = pairingTriggered ? 20000 : 10000;
+        await this.withTimeout(
+          char.startNotifications(),
+          Math.min(deadline - Date.now(), singleTimeout),
+          "单次超时",
+        );
+        return; // ✅ 成功
+      } catch (err) {
+        // SecurityError = 配对被明确拒绝/取消
+        if (err instanceof DOMException && err.name === "SecurityError") {
+          throw new Error("配对被取消或拒绝，请在系统弹窗中输入 Passkey");
+        }
+
+        const isNetworkError = err instanceof DOMException && err.name === "NetworkError";
+        const isTimeout = err instanceof Error && err.message.includes("单次超时");
+
+        if (!isNetworkError && !isTimeout) throw err;
+
+        // ⭐ 关键修复：第一次 NetworkError 说明 OS 已接管配对
+        if (isNetworkError && !pairingTriggered) {
+          pairingTriggered = true;
+          console.log("[BLE] ⏳ OS 已触发配对流程，停止高频重试，等待用户输入 Passkey...");
+          // ✅ 必须 await 等待！不能直接 continue，否则同 tick 内会再次调用 startNotifications 打断配对
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+
+        // 配对已触发后的超时/网络错误 → 安静等待，不要频繁重试
+        if (pairingTriggered) {
+          console.log(`[BLE] ⏳ 配对仍在进行中，等待 3s 后再次确认...`);
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+
+        // 首次触发前的普通兜底重试
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+    throw new Error("配对超时，请检查系统蓝牙弹窗并输入 Passkey");
+  }
+
+  async disconnect() {
+    try { this.device?.gatt?.disconnect(); } finally { this.cleanup(); this.set("disconnected"); }
+  }
+
+  async forgetDevice() {
+    if (this.device && "forget" in this.device) await this.device.forget();
+    else log("err", "当前浏览器不支持 forget()，请前往系统蓝牙设置删除");
+  }
+
+  async send(data) {
+    if (!this.txChar) throw new Error("未连接");
+    const bytes = typeof data === "string" ? this.encoder.encode(data) : data;
+    try {
+      if (this.txChar.writeValueWithoutResponse) await this.txChar.writeValueWithoutResponse(bytes);
+      else await this.txChar.writeValue(bytes);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "NotSupportedError" && this.txChar.writeValue)
+        await this.txChar.writeValue(bytes);
+      else throw err;
+    }
+  }
+
+  onNotify(e) {
+    const text = this.decoder.decode(e.target.value);
+    this.cb.onData?.(text);
+    this.rxBuf += text;
+    let idx;
+    while ((idx = this.rxBuf.indexOf("\n")) >= 0) {
+      const line = this.rxBuf.slice(0, idx).trim();
+      this.rxBuf = this.rxBuf.slice(idx + 1);
+      if (line) this.cb.onLine?.(line);
+    }
+  }
+
+  onDisconnected() {
+    if (this.status === "disconnected") return;
+    const wasPairing = this.status === "pairing";
+    log("err", `[BLE] 设备断开! wasPairing=${wasPairing}`);
+    this.cleanup();
+    if (wasPairing) {
+      this.set("error",
+        "配对过程中设备断开。请确认：\n" +
+        "1) ESP32 UART 是否打印了 6 位 passkey\n" +
+        "2) Windows 系统是否弹出了配对输入框\n" +
+        "3) 尝试先在 Win11 蓝牙设置中手动配对\n" +
+        "4) 或将固件 encrypted 设为 false 测试"
+      );
+    } else { this.set("disconnected"); }
+  }
+}
+
+// ============================================================
+// 🖥️ 下方 UI 逻辑保持不变
+// ============================================================
+const $ = (id) => document.getElementById(id);
+const logBox = $("logBox");
+
+function log(type, msg) {
+  const div = document.createElement("div");
+  div.className = `log-line ${type}`;
+  const ts = new Date().toLocaleTimeString("zh-CN", { hour12: false, fractionalSecondDigits: 3 });
+  div.textContent = `[${ts}] ${msg}`;
+  logBox.appendChild(div);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+const mockHost = {
+  _controllers: [],
+  addController(c) { this._controllers.push(c); },
+  removeController(c) { this._controllers = this._controllers.filter(x => x !== c); },
+  requestUpdate() { updateUI(); },
+};
+
+const ble = new BleController(mockHost, {
+  onStatus: (status, error) => log("info", `[STATUS] ${status}${error ? " | " + error : ""}`),
+  onLine: (line) => log("rx", `← RX LINE: ${line}`),
+  onData: (text) => {},
+});
+
+function updateUI() {
+  const s = ble.status;
+  $("statusDot").className = `dot ${s}`;
+  $("statusText").textContent = s;
+  $("errorMsg").textContent = ble.errorMessage || "";
+  const isConn = ble.connected;
+  $("btnConnect").disabled = isConn || s === "connecting" || s === "pairing" || s === "selecting";
+  $("btnDisconnect").disabled = !isConn && s !== "error";
+  $("btnForget").disabled = !ble.device;
+  $("txInput").disabled = !isConn;
+  $("btnSend").disabled = !isConn;
+}
+
+async function fullConnect() {
+  try {
+    await ble.pickDevice();
+    log("info", "[UI] 设备已选择，开始 GATT 连接...");
+    await ble.connectGatt();
+    log("info", "[UI] GATT 已连接，开始发现服务+配对...");
+    await ble.discoverServices();
+    log("rx", "🎉 配对成功！可以收发数据了");
+  } catch (err) {
+    log("err", `[UI] 连接流程异常: ${err.message || err}`);
+  }
+  updateUI();
+}
+
+$("btnConnect").addEventListener("click", fullConnect);
+$("btnDisconnect").addEventListener("click", async () => {
+  await ble.disconnect();
+  log("info", "[UI] 已主动断开");
+  updateUI();
+});
+$("btnForget").addEventListener("click", async () => {
+  await ble.forgetDevice();
+  log("info", "[UI] 已请求忘记设备");
+  updateUI();
+});
+$("btnSend").addEventListener("click", async () => {
+  const text = $("txInput").value;
+  if (!text) return;
+  try {
+    await ble.send(text + "\n");
+    log("tx", `→ TX: ${text}`);
+    $("txInput").value = "";
+  } catch (err) { log("err", `[TX ERROR] ${err.message || err}`); }
+});
+$("txInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btnSend").click(); });
+$("btnClearLog").addEventListener("click", () => { logBox.innerHTML = ""; });
+
+updateUI();
+log("info", "页面就绪，点击「选择并连接设备」开始测试");
+if (!navigator.bluetooth) {
+  log("err", "❌ 当前浏览器不支持 Web Bluetooth！请使用 Chrome / Edge");
+  $("btnConnect").disabled = true;
+}
+</script>
+</body>
+</html>

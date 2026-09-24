@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unito Lab | 智能设备研究与体验</title>
+    <meta name="description" content="探索智能加热设备、嵌入式开发与 Web IoT 工具，和同好一起把想法做成真正好用的产品。">
+    <meta name="theme-color" content="#f4efe7">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/icons/pwa-icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icons/pwa-192x192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --paper: #f4efe7;
+            --paper-deep: #e8ded1;
+            --ink: #1e2724;
+            --muted: #67716b;
+            --line: rgba(30, 39, 36, .14);
+            --orange: #dd653d;
+            --orange-dark: #a9412b;
+            --teal: #2b7771;
+            --cream: #fffaf1;
+            --shadow: 0 22px 60px rgba(83, 59, 35, .12);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--paper);
+            color: var(--ink);
+            font-family: "Noto Sans SC", "DM Sans", sans-serif;
+            line-height: 1.65;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: .28;
+            background-image: radial-gradient(rgba(30, 39, 36, .13) .7px, transparent .7px);
+            background-size: 9px 9px;
+            mask-image: linear-gradient(#000, transparent 75%);
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .shell {
+            position: relative;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 0 28px;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 0;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            text-decoration: none;
+            font-weight: 900;
+            letter-spacing: .04em;
+        }
+
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            border-radius: 10px 10px 10px 3px;
+            color: white;
+            background: var(--orange);
+            font-family: "DM Sans", sans-serif;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 26px;
+            color: var(--muted);
+            font-size: .88rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+        }
+
+        .nav-links a:hover {
+            color: var(--orange-dark);
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.05fr .95fr;
+            gap: 70px;
+            align-items: center;
+            min-height: 650px;
+            padding: 72px 0 92px;
+        }
+
+        .eyebrow,
+        .section-kicker {
+            color: var(--orange-dark);
+            text-transform: uppercase;
+            letter-spacing: .18em;
+            font: 700 .74rem "DM Sans", sans-serif;
+        }
+
+        .eyebrow {
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            max-width: 650px;
+            font-size: clamp(3.1rem, 7vw, 6rem);
+            line-height: .98;
+            letter-spacing: -.055em;
+            font-weight: 900;
+        }
+
+        h1 em {
+            color: var(--orange);
+            font-style: normal;
+        }
+
+        .hero-copy {
+            max-width: 570px;
+            margin-top: 25px;
+            color: var(--muted);
+            font-size: 1.08rem;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 14px;
+            margin-top: 34px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 19px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: .92rem;
+            transition: transform .2s, box-shadow .2s;
+        }
+
+        .button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 22px rgba(169, 65, 43, .18);
+        }
+
+        .button-primary {
+            color: white;
+            background: var(--orange);
+        }
+
+        .button-quiet {
+            border: 1px solid var(--line);
+            background: rgba(255, 250, 241, .45);
+        }
+
+        .hero-note {
+            color: var(--muted);
+            font-size: .78rem;
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            width: min(100%, 380px);
+        }
+
+        .hero-grid-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            aspect-ratio: 1/1;
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: rgba(255, 250, 241, .72);
+            text-decoration: none;
+            transition: transform .22s, border-color .22s, box-shadow .22s;
+            padding: 10px;
+        }
+
+        .hero-grid-item:hover {
+            transform: translateY(-4px) scale(1.03);
+            border-color: var(--orange);
+            box-shadow: 0 10px 24px rgba(169, 65, 43, .13);
+        }
+
+        .hero-grid-item .grid-icon {
+            width: 38px;
+            height: 38px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            background: var(--paper-deep);
+            color: var(--orange-dark);
+            font-size: 1.1rem;
+        }
+
+        .hero-grid-item .grid-label {
+            font-size: .68rem;
+            font-weight: 700;
+            text-align: center;
+            color: var(--ink);
+            line-height: 1.2;
+        }
+
+        .hero-grid-item.accent {
+            background: var(--ink);
+            border-color: var(--ink);
+        }
+
+        .hero-grid-item.accent .grid-icon {
+            background: var(--orange);
+            color: white;
+        }
+
+        .hero-grid-item.accent .grid-label {
+            color: white;
+        }
+
+        .intro-band {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 70px;
+            padding: 38px 0 88px;
+            border-top: 1px solid var(--line);
+        }
+
+        .intro-band h2 {
+            font-size: 2rem;
+            line-height: 1.15;
+            letter-spacing: -.03em;
+            margin-top: 8px;
+        }
+
+        .intro-band p:last-child {
+            max-width: 680px;
+            color: var(--muted);
+            font-size: 1.05rem;
+        }
+
+        .tools-section {
+            padding: 0 0 100px;
+        }
+
+        .section-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 30px;
+            margin-bottom: 26px;
+        }
+
+        .section-heading h2 {
+            font-size: 2.4rem;
+            line-height: 1.1;
+            letter-spacing: -.04em;
+            margin-top: 7px;
+        }
+
+        .section-heading p:last-child {
+            max-width: 400px;
+            color: var(--muted);
+            font-size: .9rem;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+
+        .tool-card {
+            display: flex;
+            flex-direction: column;
+            min-height: 250px;
+            padding: 24px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: rgba(255, 250, 241, .62);
+            text-decoration: none;
+            transition: transform .25s, border-color .25s, box-shadow .25s;
+        }
+
+        .tool-card:hover {
+            transform: translateY(-6px);
+            border-color: var(--orange);
+            box-shadow: var(--shadow);
+        }
+
+        .tool-icon {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 30px;
+            border-radius: 50%;
+            background: var(--paper-deep);
+            color: var(--orange-dark);
+            font: 700 1.2rem "DM Sans", sans-serif;
+        }
+
+        .tool-card h3 {
+            font-size: 1.05rem;
+            margin-bottom: 6px;
+        }
+
+        .tool-card p {
+            color: var(--muted);
+            font-size: .85rem;
+            line-height: 1.6;
+        }
+
+        .tool-link {
+            margin-top: auto;
+            padding-top: 18px;
+            color: var(--orange-dark);
+            font: 700 .78rem "DM Sans", sans-serif;
+        }
+
+        .tool-card.featured {
+            background: var(--ink);
+            color: white;
+            border-color: var(--ink);
+        }
+
+        .tool-card.featured p {
+            color: #bdc7bf;
+        }
+
+        .tool-card.featured .tool-icon {
+            color: white;
+            background: var(--orange);
+        }
+
+        .tool-card.featured .tool-link {
+            color: #ffae8d;
+        }
+
+        .closing {
+            display: grid;
+            grid-template-columns: 1.1fr .9fr;
+            gap: 60px;
+            padding: 62px 0 90px;
+            border-top: 1px solid var(--line);
+        }
+
+        .closing h2 {
+            max-width: 550px;
+            font-size: 2.7rem;
+            line-height: 1.08;
+            letter-spacing: -.045em;
+        }
+
+        .closing h2 span {
+            color: var(--teal);
+        }
+
+        .closing-copy {
+            color: var(--muted);
+        }
+
+        .closing-copy p+p {
+            margin-top: 16px;
+        }
+
+        footer {
+            padding: 22px 0 34px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: .76rem;
+        }
+
+        .footer-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        footer a {
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: var(--orange-dark);
+        }
+
+        @media (max-width:760px) {
+            .shell {
+                padding: 0 20px
+            }
+
+            .nav-links {
+                display: none
+            }
+
+            .hero {
+                grid-template-columns: 1fr;
+                gap: 28px;
+                min-height: auto;
+                padding: 58px 0 70px
+            }
+
+            h1 {
+                font-size: clamp(3rem, 15vw, 5rem)
+            }
+
+            .hero-grid {
+                width: min(84vw, 340px);
+                margin: 0 auto;
+            }
+
+            .intro-band,
+            .closing {
+                grid-template-columns: 1fr;
+                gap: 20px;
+                padding-bottom: 65px
+            }
+
+            .section-heading {
+                display: block
+            }
+
+            .section-heading p:last-child {
+                margin-top: 13px
+            }
+
+            .tools-grid {
+                grid-template-columns: 1fr
+            }
+
+            .tool-card {
+                min-height: 205px
+            }
+
+            .footer-row {
+                display: block
+            }
+
+            .footer-row span {
+                display: block;
+                margin-top: 8px
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="shell">
+        <nav aria-label="主导航">
+            <a class="brand" href="/"><span class="brand-mark">U</span><span>UNITO LAB</span></a>
+            <div class="nav-links"><a href="#tools">开发工具</a><a href="#about">关于实验室</a><a href="/stoov-test/">进入体验</a>
+            </div>
+        </nav>
+        <main>
+            <section class="hero">
+                <div>
+                    <p class="eyebrow">Independent IoT · 深圳</p>
+                    <h1>把舒适感，<em>做成产品。</em></h1>
+                    <p class="hero-copy">这里记录智能硬件从一块电路板到真实体验的全过程。正在研究 Stoov 智能加热垫、ESP 设备和连接它们的 Web 工具，也欢迎喜欢动手的人一起交流。</p>
+                    <div class="hero-actions"><a class="button button-primary" href="/stoov-test/">体验 Stoov 加热垫
+                            <span>↗</span></a><a class="button button-quiet" href="#tools">浏览开发工具</a><span
+                            class="hero-note">可直接在线试用</span></div>
+                </div>
+                <div class="hero-grid" aria-label="工具快速入口">
+                    <a class="hero-grid-item accent" href="/stoov-test/"><span class="grid-icon">🔥</span><span class="grid-label">Stoov<br>测试</span></a>
+                    <a class="hero-grid-item" href="/stoov-corr/"><span class="grid-icon">🎛️</span><span class="grid-label">Stoov<br>面板</span></a>
+                    <a class="hero-grid-item" href="/instrument/"><span class="grid-icon">📊</span><span class="grid-label">仪器<br>指标</span></a>
+                    <a class="hero-grid-item" href="/stm32flasher/"><span class="grid-icon">⚡</span><span class="grid-label">STM32<br>烧录</span></a>
+                    <a class="hero-grid-item" href="https://esp.unito.top/" target="_blank" rel="noreferrer"><span class="grid-icon">⬇️</span><span class="grid-label">ESP<br>烧录</span></a>
+                    <a class="hero-grid-item" href="/WebSerialPlotter/"><span class="grid-icon">📈</span><span class="grid-label">串口<br>绘图</span></a>
+                    <a class="hero-grid-item" href="/usb-test/"><span class="grid-icon">🔌</span><span class="grid-label">USB<br>测试</span></a>
+                    <a class="hero-grid-item" href="/ws8623/"><span class="grid-icon">📶</span><span class="grid-label">WS8623<br>BLE</span></a>
+                    <a class="hero-grid-item" href="https://esp.unito.top/" target="_blank" rel="noreferrer"><span class="grid-icon">📡</span><span class="grid-label">ESP<br>设备</span></a>
+                </div>
+            </section>
+            <section class="intro-band" id="about">
+                <div>
+                    <p class="section-kicker">Why Unito Lab</p>
+                    <h2>为好奇心，留一张工作台。</h2>
+                </div>
+                <p>我相信好产品应该既让人想拥有，也让人忍不住想拆开研究。本站把硬件调试、通信协议、串口工具和使用体验放在一起，既展示正在做的东西，也分享可以马上上手的工具。你可以先体验，再一起把它做得更好。</p>
+            </section>
+            <section class="tools-section" id="tools">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-kicker">Build / Test / Explore</p>
+                        <h2>项目开发工具</h2>
+                    </div>
+                    <p>从设备控制到固件烧录，所有入口都来自真实的开发和测试需求。</p>
+                </div>
+                <div class="tools-grid">
+                    <a class="tool-card featured" href="/stoov-test/"><span class="tool-icon">+</span>
+                        <h3>Stoov 加热垫测试</h3>
+                        <p>串口连接、遥控与加热测试、MQTT 数据上报。打开浏览器就能看到正在打磨的完整体验。</p><span class="tool-link">立即体验 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/stoov-corr/"><span class="tool-icon">◌</span>
+                        <h3>Stoov 控制面板</h3>
+                        <p>用于加热垫遥控、温度调节与传感器标定的实验面板，适合深入了解设备控制逻辑。</p><span class="tool-link">打开面板 ↗</span>
+                    </a>
+                    <a class="tool-card" href="https://esp.unito.top/" target="_blank" rel="noreferrer"><span
+                            class="tool-icon">⌁</span>
+                        <h3>ESP 设备面板</h3>
+                        <p>管理 ESP32 / ESP8266 设备，查看状态、远程控制，并尝试 OTA 升级。</p><span class="tool-link">访问设备面板 ↗</span>
+                    </a>
+                    <a class="tool-card" href="https://esp.unito.top/" target="_blank" rel="noreferrer"><span class="tool-icon">↓</span>
+                        <h3>ESP Web Tools</h3>
+                        <p>浏览器端固件烧录工具，支持 Web Serial API 与 Manifest 一键安装。</p><span class="tool-link">开始烧录 ↗</span>
+                    </a>
+                    <a class="tool-card" href="https://esp.unito.top/esp32PartitionBuilder/" target="_blank"
+                        rel="noreferrer"><span class="tool-icon">▦</span>
+                        <h3>ESP32 分区表构建器</h3>
+                        <p>可视化调整分区，导出 CSV，让固件空间规划不再靠猜。</p><span class="tool-link">构建分区表 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/stm32flasher/"><span class="tool-icon">⚡</span>
+                        <h3>STM32 Web 烧录器</h3>
+                        <p>浏览器端 STM32 固件烧录工具，支持 Web Serial API，自动复位电路，在线完成 ISP 编程。</p><span class="tool-link">开始烧录 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/instrument/"><span class="tool-icon">📊</span>
+                        <h3>仪器指标 (BLE)</h3>
+                        <p>通过 Web Bluetooth 实时显示仪器 VBUS / VSHUNT / IBUS / PBUS 数据，手机即可访问。</p><span class="tool-link">查看指标 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/WebSerialPlotter/"><span class="tool-icon">⌁</span>
+                        <h3>Web 串口绘图器</h3>
+                        <p>把串口数据变成实时曲线，多通道观察设备状态，调试效率立刻不一样。</p><span class="tool-link">查看实时曲线 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/usb-test/"><span class="tool-icon">🔌</span>
+                        <h3>Web USB 测试</h3>
+                        <p>基于 Web USB API 的设备连接测试工具，直接在浏览器中探索 USB 设备通信。</p><span class="tool-link">开始测试 ↗</span>
+                    </a>
+                    <a class="tool-card" href="/ws8623/"><span class="tool-icon">📶</span>
+                        <h3>WS8623 BLE 测试</h3>
+                        <p>基于 Web Bluetooth 的 WS8623 模块调试页面，支持扫描、配对、透传收发与指令测试。</p><span class="tool-link">开始测试 ↗</span>
+                    </a>
+                </div>
+            </section>
+            <section class="closing">
+                <h2>喜欢研究，也喜欢<br><span>把成品带回家。</span></h2>
+                <div class="closing-copy">
+                    <p>Stoov 加热垫仍在持续迭代中。你可以在线体验测试工具，了解它如何连接、控制和校准设备。</p>
+                    <p>如果你在寻找一件真正有温度的智能硬件，或者也在做 ESP、MQTT、串口相关项目，欢迎从这里开始。</p><a class="button button-primary"
+                        href="/stoov-test/" style="margin-top:22px;">看看正在做的产品 ↗</a>
+                </div>
+            </section>
+        </main>
+        <footer>
+            <div class="footer-row"><strong>UNITO LAB · 做有温度的 IoT</strong><span>© 2026 · <a
+                        href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">粤ICP备2025393310号-2</a> ·
+                    粤公网安备 44030002011217号</span></div>
+        </footer>
+    </div>
+    <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));</script>
+</body>
+
+</html>
