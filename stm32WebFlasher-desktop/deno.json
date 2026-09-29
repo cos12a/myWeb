@@ -1,0 +1,17 @@
+{
+  "name": "stm32webflasher-desktop",
+  "version": "1.0.0",
+  "exports": "./desktop.ts",
+  "tasks": {
+    "desktop": "deno run --allow-net --allow-read --allow-env --allow-run --allow-ffi desktop.ts",
+    "compile": "deno compile --allow-net --allow-read --allow-env --allow-run --allow-ffi --output bin/stm32WebFlasher-desktop.exe desktop.ts",
+    "sync": "deno run --allow-read --allow-write --allow-env sync-static.ts",
+    "check": "deno check main.ts desktop.ts sync-static.ts"
+  },
+  "fmt": {
+    "exclude": ["static/", "bin/"]
+  },
+  "lint": {
+    "exclude": ["static/", "bin/"]
+  }
+}

@@ -514,7 +514,7 @@
   const MQTT = {
     URL: 'wss://r61d1d77.ala.cn-shenzhen.emqxsl.cn:8084/mqtt',
     OPTIONS: {
-      username: 'heatingBed', password: 'cos8mos7',
+      username: '__REDACTED_MQTT_USER__', password: '__REDACTED_MQTT_PASS__',
       clientId: 'heating-bed-web-' + Math.random().toString(16).substring(2, 10),
       clean: true, reconnectPeriod: 5000, connectTimeout: 10000,
     },

@@ -8,8 +8,8 @@ const stoov = new Hono();
 
 const mqttConfig = {
   url: "wss://r61d1d77.ala.cn-shenzhen.emqxsl.cn:8084/mqtt",
-  username: "heatingBed",
-  password: "cos8mos7",
+  username: process.env.STOOV_MQTT_USER ?? "__REDACTED_MQTT_USER__",
+  password: process.env.STOOV_MQTT_PASS ?? "__REDACTED_MQTT_PASS__",
   reconnectPeriod: 5000,
   connectTimeout: 10000,
 };

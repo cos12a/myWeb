@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run --smol src/index.ts",
-    "install:all": "bun install && cd stoov-test && bun install && cd ../InstrumentTestLit && bun install && cd ../stm32WebFlasher && bun install && cd ../webSerialPlotter && bun install && cd ../bun-mqtt-backend && bun install",
-    "build:stoov-test": "cd stoov-test && bun install --frozen-lockfile && bun run build",
+    "install:all": "bun install && cd InstrumentTestLit && bun install && cd ../stm32WebFlasher && bun install && cd ../webSerialPlotter && bun install && cd ../bun-mqtt-backend && bun install",
+    "build:stoov-test": "cd stoov-test && deno task build",
     "build:instrument": "cd InstrumentTestLit && bun install --frozen-lockfile && bun run build",
     "build:stm32flasher": "cd stm32WebFlasher && bun install --frozen-lockfile && bun run build",
     "build:plotter": "cd webSerialPlotter && bun install --frozen-lockfile && bun run build",

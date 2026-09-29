@@ -1,0 +1,22 @@
+{
+  "name": "stoovtest-desktop",
+  "version": "0.1.0",
+  "exports": "./desktop.ts",
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "spike:mqtt": "deno run --allow-net --allow-read --allow-env spike/mqtt-spike.ts",
+    "sync": "deno run --allow-read --allow-write --allow-env sync-static.ts",
+    "start": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-ffi desktop.ts",
+    "compile": "deno compile --output bin/stoovTest-desktop.exe --allow-net --allow-read --allow-write --allow-env --allow-run --allow-ffi desktop.ts",
+    "check": "deno check main.ts desktop.ts sync-static.ts mqtt-backend.ts sqlite-store.ts serial-bridge.ts"
+  },
+  "imports": {
+    "mqtt": "npm:mqtt@5"
+  },
+  "fmt": {
+    "exclude": ["static/", "bin/", "data/", "node_modules/"]
+  },
+  "lint": {
+    "exclude": ["static/", "bin/", "data/", "node_modules/"]
+  }
+}

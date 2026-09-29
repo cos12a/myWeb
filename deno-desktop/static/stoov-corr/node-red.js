@@ -33,8 +33,8 @@
     "willQos": "0",
     "willRetain": "false",
     "willPayload": "",
-    "username": "heatingBed",
-    "password": "cos8mos7"
+    "username": "__REDACTED_MQTT_USER__",
+    "password": "__REDACTED_MQTT_PASS__"
   },
   {
     "id": "mqtt-in-cal-result",

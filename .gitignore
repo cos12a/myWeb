@@ -37,7 +37,16 @@ report.*.json
 # tool-generated indexes/caches
 .arts/
 .codegraph/
+.codeartsdoer/
 
 webSerialPlotter/dist/
 
-!bun-mqtt-backend/.env
+# 调试环境变量文件（含真实凭据，不入库）
+.env.debug
+
+# 桌面端编译产物与本地运行数据（可由 deno task compile / sync 重新生成）
+*.exe
+*.db
+*.db-wal
+*.db-shm
+**/spike/

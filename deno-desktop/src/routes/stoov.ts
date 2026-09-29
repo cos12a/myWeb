@@ -9,8 +9,8 @@ const stoov = new Hono();
 const mqttConfig = {
   url: Deno.env.get("STOOV_MQTT_URL") ??
     "wss://r61d1d77.ala.cn-shenzhen.emqxsl.cn:8084/mqtt",
-  username: Deno.env.get("STOOV_MQTT_USER") ?? "heatingBed",
-  password: Deno.env.get("STOOV_MQTT_PASS") ?? "cos8mos7",
+  username: Deno.env.get("STOOV_MQTT_USER") ?? "__REDACTED_MQTT_USER__",
+  password: Deno.env.get("STOOV_MQTT_PASS") ?? "__REDACTED_MQTT_PASS__",
   reconnectPeriod: 5000,
   connectTimeout: 10000,
 };

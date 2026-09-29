@@ -1,0 +1,17 @@
+{
+  "tasks": {
+    "dev": "deno run --allow-read --allow-net --allow-env dev.ts",
+    "build": "deno run --allow-read --allow-write --allow-env build.ts",
+    "check": "deno check dev.ts build.ts"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "singleQuote": false
+  },
+  "exclude": [
+    "dist/",
+    "node_modules/"
+  ]
+}

@@ -171,16 +171,16 @@ class HeatingPanel extends HTMLElement {
     }
 
     get power() { return this._power; }
-    set power(v) { this._power = !!v; this.setAttribute('power', v ? 'on' : 'off'); if (this._mode === 'external') this._scheduleUI(); }
+    set power(v) { this._power = !!v; this.setAttribute('power', v ? 'on' : 'off'); this._scheduleUI(); }
 
     get hours() { return this._hours; }
-    set hours(v) { this._hours = Math.max(1, Math.min(12, parseInt(v) || 1)); this.setAttribute('hours', this._hours); if (this._mode === 'external') this._scheduleUI(); }
+    set hours(v) { this._hours = Math.max(1, Math.min(12, parseInt(v) || 1)); this.setAttribute('hours', this._hours); this._scheduleUI(); }
 
     get bodyTemp() { return this._bodyTemp; }
-    set bodyTemp(v) { this._bodyTemp = Math.max(0, Math.min(36, parseInt(v) || 0)); this.setAttribute('bodytemp', this._bodyTemp); if (this._mode === 'external') this._scheduleUI(); }
+    set bodyTemp(v) { this._bodyTemp = Math.max(0, Math.min(36, parseInt(v) || 0)); this.setAttribute('bodytemp', this._bodyTemp); this._scheduleUI(); }
 
     get feetTemp() { return this._feetTemp; }
-    set feetTemp(v) { this._feetTemp = Math.max(0, Math.min(40, parseInt(v) || 0)); this.setAttribute('feettemp', this._feetTemp); if (this._mode === 'external') this._scheduleUI(); }
+    set feetTemp(v) { this._feetTemp = Math.max(0, Math.min(40, parseInt(v) || 0)); this.setAttribute('feettemp', this._feetTemp); this._scheduleUI(); }
 
     onDataChange(cb) { this._dataChangeCallback = cb; }
 
