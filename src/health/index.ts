@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { registerChecker, runAllChecks, overallStatus } from "./registry";
-import { createDatabaseChecker } from "./checkers";
+import { registerChecker, runAllChecks, overallStatus } from "./registry.ts";
+import { createDatabaseChecker } from "./checkers/index.ts";
 
 export function createHealthRoutes(app: Hono, dbDir: string): void {
   // 注册数据库检查器

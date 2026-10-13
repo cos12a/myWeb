@@ -1,16 +1,16 @@
 import { Hono } from "hono";
-import { serveStatic } from "hono/bun";
-import api from "./routes/api";
-import stoov from "./routes/stoov";
+import { serveStatic } from "hono/deno";
+import api from "./routes/api.ts";
+import stoov from "./routes/stoov.ts";
 import { logger } from "hono/logger"; // 导入 Logger 中间件
-import { createHealthRoutes } from "./health";
+import { createHealthRoutes } from "./health/index.ts";
 
 const app = new Hono();
 
 app.use(logger()); // 使用 Logger 中间件
 // ---------- 健康检查（必须放在静态路由之前） ----------
 const dbDir =
-  process.env.STOOV_DB_DIR || "/home/yzluo/unito/sqlit-db/stoov-bed";
+  Deno.env.get("STOOV_DB_DIR") || "/home/yzluo/unito/sqlit-db/stoov-bed";
 createHealthRoutes(app, dbDir);
 
 // 挂载 API 路由
@@ -119,15 +119,9 @@ app.use("/*", serveStatic({ root: "./public" }));
 // SPA 兜底：未匹配的路径返回 index.html
 app.get("*", serveStatic({ path: "./public/index.html" }));
 
-// 固定服务端口，与 Nginx 的反向代理配置保持一致。
-const port = 30000;
-// 仅允许本机 Nginx 通过回环地址访问，不直接暴露 Bun 服务。
-const hostname = "127.0.0.1";
+const port = Number(Deno.env.get("PORT") ?? 30000);
+const hostname = Deno.env.get("HOST") ?? "127.0.0.1";
 
 console.log(`🚀 Server running at http://${hostname}:${port}`);
 
-export default {
-  port,
-  hostname,
-  fetch: app.fetch,
-};
+Deno.serve({ port, hostname }, app.fetch);

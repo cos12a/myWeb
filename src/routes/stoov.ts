@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { join } from "node:path";
@@ -7,15 +7,16 @@ import { existsSync } from "node:fs";
 const stoov = new Hono();
 
 const mqttConfig = {
-  url: "wss://r61d1d77.ala.cn-shenzhen.emqxsl.cn:8084/mqtt",
-  username: process.env.STOOV_MQTT_USER ?? "__REDACTED_MQTT_USER__",
-  password: process.env.STOOV_MQTT_PASS ?? "__REDACTED_MQTT_PASS__",
+  url: Deno.env.get("STOOV_MQTT_URL") ??
+    "wss://r61d1d77.ala.cn-shenzhen.emqxsl.cn:8084/mqtt",
+  username: Deno.env.get("STOOV_MQTT_USER") ?? "__REDACTED_MQTT_USER__",
+  password: Deno.env.get("STOOV_MQTT_PASS") ?? "__REDACTED_MQTT_PASS__",
   reconnectPeriod: 5000,
   connectTimeout: 10000,
 };
 
 const databaseDirectory =
-  process.env.STOOV_DB_DIR || "/home/yzluo/unito/sqlit-db/stoov-bed";
+  Deno.env.get("STOOV_DB_DIR") || "/home/yzluo/unito/sqlit-db/stoov-bed";
 
 const columns = {
   external: [
@@ -75,7 +76,7 @@ stoov.post("/test-data/download", async (c: Context) => {
   }
 
   try {
-    const database = new Database(databasePath, { readonly: true });
+    const database = new DatabaseSync(databasePath, { readOnly: true });
     try {
       const csv = buildCsv(queryRows(database, mode), columns[mode]);
       const filename = `${mode === "internal" ? "heating_test_data" : "Stoov_Remote"}_${datePrefix()}.csv`;
@@ -97,7 +98,7 @@ stoov.post("/test-data/download", async (c: Context) => {
   }
 });
 
-function queryRows(database: Database, mode: Mode): Row[] {
+function queryRows(database: DatabaseSync, mode: Mode): Row[] {
   const query =
     mode === "internal"
       ? `SELECT barcode, timestamp, deviceId, deviceVer, items_json,
@@ -106,7 +107,7 @@ function queryRows(database: Database, mode: Mode): Row[] {
       : `SELECT barcode, timestamp, items_json,
          strftime('%Y-%m-%d %H:%M:%S', datetime(updated_at, '+8 hours')) AS updated_at
        FROM data_table ORDER BY updated_at DESC`;
-  return database.query(query).all() as Row[];
+  return database.prepare(query).all();
 }
 
 function buildCsv(

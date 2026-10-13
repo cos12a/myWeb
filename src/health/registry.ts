@@ -1,4 +1,4 @@
-import type { HealthChecker, HealthCheckResult } from "./types";
+import type { HealthChecker, HealthCheckResult } from "./types.ts";
 
 const checkers: HealthChecker[] = [];
 

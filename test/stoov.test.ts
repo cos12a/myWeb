@@ -1,65 +1,61 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
-import { mkdir, writeFile, rm } from "node:fs/promises";
-import stoov from "../src/routes/stoov"; // 假设你的路由文件导出了 app
 
-describe("STOOV 数据下载接口测试", () => {
-  // 创建一个临时目录来模拟数据库文件
-  const testDbDir = join(import.meta.dir, "temp_db");
-  const externalDbPath = join(testDbDir, "yaokong.db");
-  const internalDbPath = join(testDbDir, "Heating.db");
+Deno.test("STOOV 数据下载接口读取 SQLite 并返回 CSV", async () => {
+  const testDbDir = await Deno.makeTempDir();
+  const previousDbDir = Deno.env.get("STOOV_DB_DIR");
 
-  beforeAll(async () => {
-    // 创建测试目录并写入两个空数据库（或者包含有效结构的数据库）
-    await mkdir(testDbDir, { recursive: true });
-    // 创建空文件（或者你可以用 Bun.write 写一个有效的 SQLite 文件）
-    await Bun.write(externalDbPath, ""); // 注意：空文件不是有效的 SQLite 文件，但这里只是为了测试文件存在
-    await Bun.write(internalDbPath, "");
-  });
+  try {
+    Deno.env.set("STOOV_DB_DIR", testDbDir);
+    const { default: stoov } = await import("../src/routes/stoov.ts");
 
-  afterAll(async () => {
-    // 清理临时目录
-    await rm(testDbDir, { recursive: true, force: true });
-  });
+    const database = new DatabaseSync(join(testDbDir, "yaokong.db"));
+    database.exec(
+      `CREATE TABLE data_table (
+        barcode TEXT,
+        timestamp TEXT,
+        items_json TEXT,
+        updated_at TEXT
+      )`,
+    );
+    database.prepare(
+      `INSERT INTO data_table (barcode, timestamp, items_json, updated_at)
+       VALUES (?, ?, ?, ?)`,
+    ).run(
+      "B-01",
+      "14:30",
+      JSON.stringify({ "1": "ON" }),
+      "2026-10-13 14:30:00",
+    );
+    database.close();
 
-  test("当数据库文件存在时，应返回 CSV 文件", async () => {
-    // 需要重写环境变量，让程序使用测试目录
-    const originalEnv = process.env.STOOV_DB_DIR;
-    process.env.STOOV_DB_DIR = testDbDir;
+    const response = await stoov.request("/test-data/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "external" }),
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("Content-Type") ?? "", /text\/csv/);
+    const csv = await response.text();
+    assert.match(csv, /B-01/);
+    assert.match(csv, /ON/);
 
-    try {
-      const response = await stoov.request("/test-data/download", {
+    const missingDatabaseResponse = await stoov.request(
+      "/test-data/download",
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "external" }),
-      });
-      expect(response.status).toBe(200);
-      expect(response.headers.get("Content-Type")).toContain("text/csv");
-      // 可选：检查 CSV 内容
-    } finally {
-      process.env.STOOV_DB_DIR = originalEnv;
+        body: JSON.stringify({ mode: "internal" }),
+      },
+    );
+    assert.equal(missingDatabaseResponse.status, 404);
+  } finally {
+    if (previousDbDir === undefined) {
+      Deno.env.delete("STOOV_DB_DIR");
+    } else {
+      Deno.env.set("STOOV_DB_DIR", previousDbDir);
     }
-  });
-
-  test("当数据库文件不存在时，应返回 503 及错误信息", async () => {
-    // 设置一个不存在的目录
-    const originalEnv = process.env.STOOV_DB_DIR;
-    process.env.STOOV_DB_DIR = join(testDbDir, "nonexistent");
-
-    try {
-      const response = await stoov.request("/test-data/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "external" }),
-      });
-      expect(response.status).toBe(503);
-      const json = await response.json();
-      expect(json).toMatchObject({
-        success: false,
-        message: expect.stringContaining("数据库不可用"),
-      });
-    } finally {
-      process.env.STOOV_DB_DIR = originalEnv;
-    }
-  });
+    await Deno.remove(testDbDir, { recursive: true });
+  }
 });

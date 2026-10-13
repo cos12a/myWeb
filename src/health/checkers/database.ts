@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { Database } from "bun:sqlite";
-import type { HealthChecker, HealthCheckResult } from "../types";
+import { DatabaseSync } from "node:sqlite";
+import type { HealthChecker, HealthCheckResult } from "../types.ts";
 
 export function createDatabaseChecker(dbDir: string): HealthChecker {
   const databases = [
@@ -20,8 +20,8 @@ export function createDatabaseChecker(dbDir: string): HealthChecker {
             details[name] = { ok: false, error: "File not found" };
             continue;
           }
-          const db = new Database(path, { readonly: true });
-          db.query("SELECT 1").get();
+          const db = new DatabaseSync(path, { readOnly: true });
+          db.prepare("SELECT 1").get();
           db.close();
           details[name] = { ok: true };
         } catch (err) {
