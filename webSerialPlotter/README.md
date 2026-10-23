@@ -262,6 +262,11 @@ Firefox 和 Safari 目前不支持 Web Serial。在桌面端，请使用 Chrome 
 
 欢迎提出想法、问题和拉取请求。如果你使用特定硬件进行测试，请分享设备详细信息和示例输出，以便我们改进默认配置和解析逻辑。
 
+## 模块改动指南
+
+RingStore、Canvas 渲染、四套坐标系、导出与测试注入点的实现说明见
+[`.agents/skills/web-serial-plotter/SKILL.md`](../.agents/skills/web-serial-plotter/SKILL.md)。
+
 ## 许可证
 
 本项目基于 **GNU General Public License v3.0** 许可 — 详见 [LICENSE](LICENSE) 文件。

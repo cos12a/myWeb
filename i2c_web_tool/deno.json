@@ -1,0 +1,32 @@
+{
+  "name": "i2c-web-tool",
+  "version": "0.1.0",
+  "exports": "./server.ts",
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@vitejs/plugin-react": "npm:@vitejs/plugin-react@5.0.4",
+    "vite": "npm:vite@7.3.7",
+    "typescript": "npm:typescript@5.9.3",
+    "react": "npm:react@19.2.0",
+    "react-dom": "npm:react-dom@19.2.0",
+    "react-dom/client": "npm:react-dom@19.2.0/client",
+    "react/jsx-runtime": "npm:react@19.2.0/jsx-runtime",
+    "hono": "npm:hono"
+  },
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "lib": ["deno.window", "dom", "dom.iterable", "dom.asynciterable", "esnext"]
+  },
+  "tasks": {
+    "build": "deno run -A npm:vite build",
+    "dev": "deno run -A npm:vite --host 127.0.0.1",
+    "start": "deno run -A server.ts",
+    "preview": {
+      "command": "deno run -A server.ts",
+      "dependencies": ["build"]
+    },
+    "check": "deno check server.ts src/main.tsx src/api.ts src/types.ts src/transport/types.ts src/transport/byte_queue.ts src/transport/manager.ts src/serial/backend.ts src/serial/serial_lwpkt.ts src/serial/web_serial_transport.ts src/serial/ble_nus_transport.ts src/serial/ch224.ts src/serial/mlx90614.ts src/serial/lis3dh.ts",
+    "test": "deno test tests"
+  }
+}

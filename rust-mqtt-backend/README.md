@@ -127,6 +127,11 @@ src/
 
 ---
 
+## 模块改动指南
+
+三版采集管线的共享契约、TLS 特性门控、去重/分类/时间戳对齐要求与排查清单见
+[`.agents/skills/mqtt-influx-pipeline/SKILL.md`](../.agents/skills/mqtt-influx-pipeline/SKILL.md)。
+
 ## 许可证与出处
 
 Rust 重写自 `go-mqtt-backend`（v2.1）与 `bun-mqtt-backend`。行为规范以 [`HANDOFF.md`](./HANDOFF.md) 为准。

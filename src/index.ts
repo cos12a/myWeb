@@ -113,6 +113,20 @@ app.use(
 app.get("/usb-test", serveStatic({ path: "./usb-test/index.html" }));
 app.get("/usb-test/", serveStatic({ path: "./usb-test/index.html" }));
 
+// I²C Web Tool：浏览器 Web Serial 直连 ESP32-Bus-Pirate 固件
+// Vite 使用相对 base（./），因此必须带尾斜杠访问，否则相对资源会解析到站点根。
+// 重定向必须注册在 /i2c/* 之前，否则会被 serveStatic 抢先返回 index.html。
+app.get("/i2c", (c) => c.redirect("/i2c/"));
+app.use(
+  "/i2c/*",
+  serveStatic({
+    root: "./",
+    rewriteRequestPath: (path: string) =>
+      path.replace(/^\/i2c/, "/i2c_web_tool/dist"),
+  }),
+);
+app.get("/i2c/", serveStatic({ path: "./i2c_web_tool/dist/index.html" }));
+
 // 托管 public 目录下的静态文件
 app.use("/*", serveStatic({ root: "./public" }));
 

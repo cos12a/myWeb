@@ -183,3 +183,10 @@ MyWebDesktop/
 
 - 本方案是「本地服务 + 系统浏览器」形态，**不是原生窗口**。若将来需要真·原生窗口（无浏览器地址栏、独立图标/菜单），可在带图形界面的机器上引入 `webview_deno`（WebKit2GTK）或 `deno_desktop`（Qt）承载同一套 `static/` 前端。
 - `deno compile` 产物内嵌整个 Deno 运行时，体积约 100MB 属正常；可用 `--engine quickjs`（实验性，更小）权衡体积与兼容性。
+
+---
+
+## 模块改动指南
+
+桌面封装、静态根解析、`deno compile` 与 Win32 FFI 串口桥的说明见
+[`.agents/skills/desktop-serial-bridge/SKILL.md`](../.agents/skills/desktop-serial-bridge/SKILL.md)。

@@ -1,11 +1,40 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@hono/hono@4.13.8": "4.13.8"
+    "jsr:@hono/hono@4.13.8": "4.13.8",
+    "npm:@types/bun@^1.4.0": "1.4.3",
+    "npm:hono@^4.13.3": "4.13.13"
   },
   "jsr": {
     "@hono/hono@4.13.8": {
       "integrity": "bbb566d9ebb81e74c0d7eeff1f9221ba9f3fda6f1832e5ca66cbddcecb2f7fec"
+    }
+  },
+  "npm": {
+    "@types/bun@1.4.3": {
+      "integrity": "sha512-N67Pqy8JXbAY/j0tNraS3V5mubGvc6rrrNDmDCtZLlFzccbUJPDb0tvgUBC5q4m8ybkP93Jcn1QB+RYQ6PvBhw==",
+      "dependencies": [
+        "bun-types"
+      ]
+    },
+    "@types/node@26.6.3": {
+      "integrity": "sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==",
+      "dependencies": [
+        "undici-types"
+      ]
+    },
+    "bun-types@1.4.3": {
+      "integrity": "sha512-tinRJNGOmUN+tEAsn2y2e942n9JHRHR42iUYzDH75NmhJqVBokGSQkkfSFdNWwsANIdrK6ACH9t01M452YyTwg==",
+      "dependencies": [
+        "@types/node",
+        "undici-types"
+      ]
+    },
+    "hono@4.13.13": {
+      "integrity": "sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA=="
+    },
+    "undici-types@8.9.0": {
+      "integrity": "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="
     }
   },
   "workspace": {

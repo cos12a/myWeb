@@ -72,6 +72,11 @@ tests/
 
 📘 **[PLATFORM.md](./PLATFORM.md)** — IoT 传感器数据平台完整文档（v2.0）
 
+## 模块改动指南
+
+三版（Bun/Go/Rust）采集管线的共享契约、去重/字段分类/时间戳规则与排查清单见
+[`.agents/skills/mqtt-influx-pipeline/SKILL.md`](../.agents/skills/mqtt-influx-pipeline/SKILL.md)。
+
 ## 许可证
 
 Private — 内部项目。

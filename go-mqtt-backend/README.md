@@ -109,3 +109,10 @@ Go 版本要求：**1.22+**（开发验证于 1.27.1）。
 make test          # 73 个测试函数，覆盖 classifier / dedup / timestamp
 make test-cover    # 覆盖率：classifier 80% / dedup 97% / timestamp 100%
 ```
+
+---
+
+## 模块改动指南
+
+与 Bun/Rust 两版保持一致的订阅、去重、字段分类、时间戳归一化与健康端点契约见
+[`.agents/skills/mqtt-influx-pipeline/SKILL.md`](../.agents/skills/mqtt-influx-pipeline/SKILL.md)。

@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "deno task dev",
     "start": "deno task start",
-    "install:all": "bun install && cd InstrumentTestLit && bun install && cd ../stm32WebFlasher && bun install && cd ../webSerialPlotter && bun install && cd ../bun-mqtt-backend && bun install",
+    "install:all": "bun install && cd InstrumentTestLit && bun install && cd ../stm32WebFlasher && bun install && cd ../webSerialPlotter && bun install && cd ../bun-mqtt-backend && bun install && cd ../i2c_web_tool && deno install",
     "build:stoov-test": "cd stoov-test && deno task build",
     "build:instrument": "cd InstrumentTestLit && bun install --frozen-lockfile && bun run build",
     "build:stm32flasher": "cd stm32WebFlasher && bun install --frozen-lockfile && bun run build",
     "build:plotter": "cd webSerialPlotter && bun install --frozen-lockfile && bun run build",
-    "build": "bun run build:stoov-test && bun run build:instrument && bun run build:stm32flasher && bun run build:plotter",
+    "build:i2c": "cd i2c_web_tool && deno install && deno task build",
+    "build": "bun run build:stoov-test && bun run build:instrument && bun run build:stm32flasher && bun run build:plotter && bun run build:i2c",
     "build:parallel": "bun run scripts/build-all.ts"
   },
   "devDependencies": {

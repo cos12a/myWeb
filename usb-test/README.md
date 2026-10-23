@@ -54,3 +54,8 @@ HEX 值会作为单字节发送到 OUT 端点。如需发送多字节命令，�
 ```html
 <button class="btn btn-sm" data-cmd="0xAA 0x01 0x55">多字节命令</button>
 ```
+
+## 模块改动指南
+
+设备发现、配置/接口声明、端点收发、自动重连与常见坑见
+[`.agents/skills/usb-webusb-test/SKILL.md`](../.agents/skills/usb-webusb-test/SKILL.md)。

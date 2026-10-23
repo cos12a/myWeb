@@ -174,6 +174,11 @@ node src/cli.js --help
 
 ---
 
+## 模块改动指南
+
+USART Bootloader 命令流、DTR/RTS 时序、HEX/BIN 解析与测试注入点见
+[`.agents/skills/stm32-web-flasher/SKILL.md`](../.agents/skills/stm32-web-flasher/SKILL.md)。
+
 ## 许可证
 
 MIT — 详见 [LICENSE](LICENSE)。

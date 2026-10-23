@@ -39,6 +39,13 @@ report.*.json
 .codegraph/
 .codeartsdoer/
 
+# AI agent 技能与配置（本地资产，不入库）
+.agents/
+
+# 芯片资料与本地提取文档（体积大且仅供本地参考，不入库）
+i2c_web_tool/sensor_data/
+i2c_web_tool/docs/
+
 webSerialPlotter/dist/
 
 # 调试环境变量文件（含真实凭据，不入库）

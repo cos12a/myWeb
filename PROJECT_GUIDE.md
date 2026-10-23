@@ -27,6 +27,7 @@
 ├── ws8623Demo/                     WS8623 BLE 演示页面
 ├── stm32WebFlasher/                浏览器 STM32 烧录器
 ├── webSerialPlotter/               浏览器串口绘图器
+├── i2c_web_tool/                   Web Serial / BLE I²C 调试台
 └── usb-test/                       WebUSB 调试页面
 
 桌面封装（独立项目）
@@ -59,6 +60,7 @@
 | `/ws8623/` | `ws8623Demo/` | WS8623 BLE 测试页面 |
 | `/stm32flasher/` | `stm32WebFlasher/dist/` | Web Serial STM32 烧录工具 |
 | `/WebSerialPlotter/` | `webSerialPlotter/dist/` | 实时串口绘图；路径大小写不可更改 |
+| `/i2c/` | `i2c_web_tool/dist/` | 浏览器 Web Serial / Web Bluetooth（BLE NUS）I²C 调试台；必须带尾斜杠访问 |
 | `/usb-test/` | `usb-test/` | WebUSB 设备通信页面 |
 
 运行时环境变量：
@@ -129,6 +131,19 @@
 - **访问**：主站 `/usb-test/`。
 - **限制**：使用 Chrome/Edge 等支持 WebUSB 的浏览器，并通过 HTTPS 或 localhost 访问；浏览器会要求用户主动授权设备。
 
+### 4.8 `i2c_web_tool`：Web Serial / BLE I²C 调试台
+
+- **用途**：通过 Web Serial 或 Web Bluetooth（BLE NUS 串口透传）连接运行 ESP32-Bus-Pirate / STM32 固件的设备，完成 I²C 引脚与频率设置、总线扫描、单字节寄存器读写、原始传输、24Cxx EEPROM 读写，并提供 CH224A（PD/QC 取电）与 MLX90614（红外测温）专用面板。
+- **技术**：React 19、TypeScript、Vite 7、Deno + Hono 静态托管、Web Serial、Web Bluetooth（NUS）；协议为 LWPKT 帧（CRC-8）、全异步请求-应答。传输层抽象为 `ByteTransport` / `TransportProvider`，`TransportManager` 保证同一时刻只有一条活跃连接，可扩展到 WebUSB。
+- **开发**：`cd i2c_web_tool`，先 `deno install`，再 `deno task dev`（`http://127.0.0.1:5174`）。
+- **构建/检查/测试**：`deno task build`、`deno task check`、`deno task test`（70 项纯内存测试，无需硬件）。
+- **独立运行**：`deno task start`（`http://127.0.0.1:8787`，`PORT` 可覆盖）。
+- **访问**：主站 `/i2c/`。构建使用相对 `base`，同一份 `dist/` 既可独立托管，也可挂到子路径；访问 `/i2c` 会 302 到 `/i2c/`。
+- **断开与资源释放**：主动断开先退订事件再 `transport.close()`（串口 cancel 读泵、释放 reader/writer 锁并 `port.close()`；BLE 解监听、停通知并 `gatt.disconnect()`）；拔出或 GATT 异常断开由 `onClosed` 回调 → manager 补一次幂等 `close()` 后广播 `disconnected`，重连前等待清理完成，避免端口占用与监听器累积；MLX90614 自动轮询随 `connected=false` 停止。页面刷新/关闭由浏览器回收设备。详见 `i2c_web_tool/docs/PROGRAM_FLOW.md` 第 6 章与 `docs/TRANSPORT_MODULES.md` 6.6。
+- **总线参数**：ESP32 通过 CAPS v2 上报可用 GPIO 表（含默认/strap/保留原因）与频率范围，页面只展示真实可用引脚，再用 CONFIG 设置 SDA/SCL/频率；STM32 通过 CAPS 上报 I2C 实例与固定复用方案，BUS_SELECT 切换；旧固件自动降级为自由引脚模式。协议总览见 `docs/I2C_BUS_CONFIG.md`，ESP32 固件协议见 `docs/ESP32_FIRMWARE_PROTOCOL.md`，引脚参考见 `docs/ESP32-I2C-PINMAP.md`、`docs/STM32-I2C-PINMAP.md`。
+- **限制**：仅 Chromium 内核浏览器且需安全上下文；串口/蓝牙二选一（互斥）；BLE 单包 20 字节，长帧吞吐低于串口；固件不支持 SPI；同一设备同时只能被一个页面占用；STM32 不能任意指定 GPIO，只能选固件上报方案。
+- **详细说明**：见 [`i2c_web_tool/README.md`](./i2c_web_tool/README.md)、[`Web串口I2C-操作说明.md`](./i2c_web_tool/Web串口I2C-操作说明.md)、[`Web串口I2C-程序设计说明.md`](./i2c_web_tool/Web串口I2C-程序设计说明.md)、[`docs/TRANSPORT_MODULES.md`](./i2c_web_tool/docs/TRANSPORT_MODULES.md)、[`docs/PROGRAM_FLOW.md`](./i2c_web_tool/docs/PROGRAM_FLOW.md)、[`docs/I2C_BUS_CONFIG.md`](./i2c_web_tool/docs/I2C_BUS_CONFIG.md)、[`docs/ESP32_FIRMWARE_PROTOCOL.md`](./i2c_web_tool/docs/ESP32_FIRMWARE_PROTOCOL.md)、[`docs/ESP32-I2C-PINMAP.md`](./i2c_web_tool/docs/ESP32-I2C-PINMAP.md)、[`docs/STM32-I2C-PINMAP.md`](./i2c_web_tool/docs/STM32-I2C-PINMAP.md)。
+
 ## 5. 桌面应用子项目
 
 桌面版是独立的 Deno 服务/可执行文件，不是根目录服务的自动模式。涉及串口 FFI 的桌面程序面向 Windows；更新上游 Web 页面后，先运行对应 `sync` 任务再编译。`static/` 多为同步生成目录，应修改源项目或 overlay，不要把同步生成物当作源文件维护。
@@ -184,7 +199,7 @@ bun run build
 deno task start
 ```
 
-`bun run build` 依次构建 `stoov-test`（调用 Deno）、`InstrumentTestLit`、`stm32WebFlasher` 和 `webSerialPlotter`。若希望并行构建，可运行 `bun run build:parallel`。它不会构建三个桌面封装或 MQTT 后端。
+`bun run build` 依次构建 `stoov-test`（调用 Deno）、`InstrumentTestLit`、`stm32WebFlasher`、`webSerialPlotter` 和 `i2c_web_tool`（`deno install && deno task build`）。若希望并行构建，可运行 `bun run build:parallel`。它不会构建三个桌面封装或 MQTT 后端。
 
 生产服务默认只监听本机回环地址，应由 Nginx/Caddy 代理并配置 HTTPS。systemd 的工作目录应指向仓库根目录；更新主站托管页面时，先完成上面的构建，再重启根目录 Deno 服务。
 
@@ -203,7 +218,8 @@ deno task compile
 
 - **主站 Deno 任务**：根目录 `deno.json`；主站入口与 API：`src/`。
 - **根目录构建流程**：根 `package.json` 与 `scripts/build-all.ts`。
-- **网页工具源代码**：分别位于其项目目录；主站读取它们的 `dist/` 或静态源文件。
+- **网页工具源代码**：分别位于其项目目录；主站读取它们的 `dist/` 或静态源文件。各浏览器工具的开发说明分别见 `stoov-test/README.md`、`stoov-corr/README.md`、`InstrumentTestLit/README.md`、`ws8623Demo/README.md`、`stm32WebFlasher/README.md`、`webSerialPlotter/README.md`、`i2c_web_tool/README.md`、`usb-test/README.md`。
+- **Skill 与代理说明**：根目录 `.agents/skills/` 按模块提供改动指南，索引见 [`.agents/skills/README.md`](./.agents/skills/README.md)；仓库级代理说明见 [`AGENTS.md`](./AGENTS.md)。
 - **桌面生成资源**：`*-desktop/static/` 是同步副本；使用 `sync` 更新，不直接修改后期待更改回流上游。
 - **运行时数据和编译产物**：如 `data/`、`bin/`、`dist/`、`node_modules/` 按各子项目约定生成，不作为源码入口。
 - **`test/`**：根主站的 Deno 路由测试及历史数据库检查脚本。

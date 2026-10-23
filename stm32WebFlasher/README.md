@@ -172,6 +172,11 @@ The core STM32 UART ISP logic is in `src/stm32.js` and `src/firmware.js`. Transp
 
 ---
 
+## Module change guide
+
+Architecture, USART bootloader command flow, DTR/RTS timing and test entry points:
+[`.agents/skills/stm32-web-flasher/SKILL.md`](../.agents/skills/stm32-web-flasher/SKILL.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.

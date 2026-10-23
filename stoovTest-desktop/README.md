@@ -91,3 +91,8 @@ deno task compile   # 产出 bin/stoovTest-desktop.exe
 > 2026-09-29 上游转纯 Deno + 桌面同步优化：stoov-test 已从 npm/bun/pnpm+Vite 迁移为纯 Deno 工程（index.html 零改动，14 锚点仍全中）；src/main.js 等上游 `src/` 已确认不被 index.html 加载，sync 不再拷贝它（改为重建前清空 static/src），并移除了失效的 install.js 整文件置换。同步修正 `main.ts` 静态根判据：由 `index.html + src/main.js` 改为 `index.html + native-mqtt-shim.js`（否则停拷 src/ 会导致静态根定位失败）。
 
 > 完整实现过程、补丁清单、验证记录与踩坑总结见 [IMPLEMENTATION.md](./IMPLEMENTATION.md)；前期勘察与决策依据见 [DESKTOP_EVALUATION.md](./DESKTOP_EVALUATION.md)。
+
+## 模块改动指南
+
+静态根解析、`sync-static.ts` 锚点补丁、`/ws/serial` 与 `/ws/mqtt` 的实现约束见
+[`.agents/skills/desktop-serial-bridge/SKILL.md`](../.agents/skills/desktop-serial-bridge/SKILL.md)。

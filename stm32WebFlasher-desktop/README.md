@@ -111,3 +111,8 @@ static/firmware/stoov-bed-firmware.hex
 
 - `PORT`：服务端口
 - `HOST`：监听地址
+
+## 模块改动指南
+
+桌面封装、静态根解析、Win32 FFI 串口桥与 `sync` 锚点补丁的实现约束见
+[`.agents/skills/desktop-serial-bridge/SKILL.md`](../.agents/skills/desktop-serial-bridge/SKILL.md)。

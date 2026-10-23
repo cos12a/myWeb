@@ -103,6 +103,7 @@ GET /api/iot-data
 ├── InstrumentTestLit/    # BLE 仪器测量面板（Lit）
 ├── stm32WebFlasher/      # STM32 Web 烧录工具
 ├── webSerialPlotter/     # Web 串口绘图器
+├── i2c_web_tool/         # Web Serial / BLE I²C 调试台（LWPKT / CH224A / MLX90614）
 ├── usb-test/             # WebUSB 调试页面
 ├── *-desktop/            # Deno 桌面封装
 ├── *-mqtt-backend/       # Bun/Go/Rust MQTT 后端
@@ -117,6 +118,7 @@ GET /api/iot-data
 - `/stoov-test/*`：托管 `stoov-test/dist`，部署前通过 `bun run build` 构建（stoov-test 已迁移为纯 Deno 工程，实际执行 `deno task build`）。
 - `/stoov-corr/*`：托管 `stoov-corr` 中的原生静态页面和资源。
 - `/instrument/*`、`/ws8623/*`、`/stm32flasher/*`、`/WebSerialPlotter/*`、`/usb-test/*`：分别托管对应的 BLE、STM32、串口绘图和 USB 子项目；构建与独立运行方式见[项目完整说明](./PROJECT_GUIDE.md)。
+- `/i2c/*`：托管 `i2c_web_tool/dist`，提供浏览器 Web Serial / Web Bluetooth（BLE NUS）I²C 调试台；构建方式为 `cd i2c_web_tool && deno install && deno task build`，已纳入根目录 `bun run build`。该页面使用相对资源路径，访问 `/i2c` 会自动跳转到 `/i2c/`，请保留尾斜杠。
 - 其他静态资源：从 `public` 目录提供。
 - 未匹配的页面路径：回退到 `public/index.html`，支持单页应用访问。
 
@@ -165,13 +167,19 @@ bun run build
 sudo systemctl restart mywebbun
 ```
 
-`bun run build` 会进入 `stoov-test` 执行 `deno task build`（纯 Deno 零依赖：拷贝运行时资源 + 轻量压缩 index.html），其余子项目走各自 Bun 构建；服务器启动后，两个工具分别通过以下地址访问：
+`bun run build` 会进入 `stoov-test` 执行 `deno task build`（纯 Deno 零依赖：拷贝运行时资源 + 轻量压缩 index.html），其余子项目走各自 Bun 构建，`i2c_web_tool` 则执行 `deno install && deno task build`；服务器启动后，工具分别通过以下地址访问：
 
 - `http://localhost:30000/stoov-test/`
 - `http://localhost:30000/stoov-corr/`
+- `http://localhost:30000/i2c/`
 
-部署服务器时需要同时上传主项目、`stoov-test` 和 `stoov-corr` 目录，并在启动服务前执行一次构建。
+部署服务器时需要同时上传主项目、`stoov-test`、`stoov-corr` 和 `i2c_web_tool` 目录，并在启动服务前执行一次构建。
 
 ## 开发说明
 
 主要服务入口是 `src/index.ts`，Deno 的 `dev` 和 `start` 任务定义在根目录 `deno.json`；`package.json` 中对应脚本转发到这些 Deno 任务。新增接口时，可以在 `src/routes/api.ts` 中扩展路由；接入真实设备数据时，应替换 `/api/iot-data` 中的随机数据生成逻辑。
+
+- 仓库级代理约束、路由模板与最低验证清单：[`AGENTS.md`](./AGENTS.md)
+- 按模块组织的改动指南（Skill）：[`.agents/skills/README.md`](./.agents/skills/README.md)
+- 逐模块运行、构建与排障：[`PROJECT_GUIDE.md`](./PROJECT_GUIDE.md)
+- 系统架构与设计决策：[`ARCHITECTURE.md`](./ARCHITECTURE.md)
