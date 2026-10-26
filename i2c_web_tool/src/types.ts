@@ -549,8 +549,8 @@ export interface Lis3dhRegisterSet {
   fifoCtrl: number;
 }
 
-/** 采样读取方式：单次轮询 / FIFO 批量 / 设备主动推送。 */
-export type Lis3dhReadMode = "poll" | "fifo" | "stream";
+/** 采样读取方式：单次轮询 / FIFO 批量 / 设备主动推送 / 周期自动上报。 */
+export type Lis3dhReadMode = "poll" | "fifo" | "stream" | "report";
 
 /** 寄存器目录（含输出模式/FIFO/中断路由选项，供 UI 下拉渲染）。 */
 export interface Lis3dhRegisterCatalog {
@@ -608,6 +608,13 @@ export type {
   I2cPinCapability,
   I2cPinMode,
   I2cPinScheme,
+  I2cReportConfig,
+  I2cReportFrame,
+  I2cReportInfo,
+  I2cReportStatus,
+  I2cReportStopped,
+  I2cReportSummary,
+  I2cReportTask,
   I2cStreamFrame,
   I2cStreamInfo,
   I2cStreamRequest,

@@ -482,3 +482,219 @@ Deno.test("old firmware rejecting STREAM_START surfaces a friendly error", async
   );
   await backend.disconnect();
 });
+
+Deno.test("startStream validates intPin against the firmware pin table", async () => {
+  const responses: Responder = (cmd, data) => {
+    if (cmd === CMD.STREAM_START) return [0x00, 0x01, 0x0a, 0x00, 0x01];
+    if (cmd === CMD.STREAM_STOP) return [0x00, 0x00, 0x00, 0x00, 0x00];
+    return BUS_RESPONSES(cmd, data);
+  };
+  const { backend } = createBackend(responses);
+  await backend.connect("port-1", 115200);
+  await backend.readBusCapabilities();
+  await assertRejects(
+    () => backend.startStream({ ...streamRequest(), intPin: 5 }),
+    /不在固件上报的可用引脚表/,
+  );
+  await assertRejects(
+    () => backend.startStream({ ...streamRequest(), intPin: 19 }),
+    /USB\/JTAG/,
+  );
+  const info = await backend.startStream({ ...streamRequest(), intPin: 8 });
+  assert(
+    /GPIO8/.test(info.message),
+    `合法引脚应使用 GPIO 名称提示：${info.message}`,
+  );
+  await backend.stopStream();
+  await backend.disconnect();
+});
+
+// —— 周期自动上报（REPORT_CONFIG / START / STOP / STATUS / CLEAR / DATA）——
+
+/** 固件任务表快照：task0 运行中 100 ms、task1 运行中 1000 ms、另两个空槽位。 */
+const REPORT_TABLE = [
+  0x00, 0x18, 0xa8, 0x06, 0x64, 0x00, 0x02,
+  0x01, 0x5a, 0x07, 0x03, 0xe8, 0x03, 0x02,
+  0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
+const REPORT_RESPONSES: Responder = (cmd, data) => {
+  if (cmd === CMD.ECHO) return [0x00, data[0] ?? 0, data[1] ?? 0];
+  if (cmd === CMD.REPORT_CONFIG) {
+    // 固件把 100 ms 钳到 tick 10 ms，并声明支持 ONLY_CHANGED
+    return [0x00, data[0] ?? 0, 0x0a, 0x00, 0x01];
+  }
+  if (cmd === CMD.REPORT_START) {
+    return [0x00, data[0] === 0xff ? 0x02 : 0x01, 0x0a, 0x00];
+  }
+  if (cmd === CMD.REPORT_STOP) {
+    return [0x00, 0x02, 0x00, 0x78, 0x00, 0x00, 0x00, 0x01, 0x2c, 0x01, 0x00, 0x00];
+  }
+  if (cmd === CMD.REPORT_STATUS) {
+    return [0x00, 0x01, 0x04, 0x02, 0x0a, 0x00, 0x04, ...REPORT_TABLE];
+  }
+  if (cmd === CMD.REPORT_CLEAR) return [0x00, 0x02];
+  return [0x00];
+};
+
+function reportTask(overrides: Partial<{
+  taskId: number;
+  address: number;
+  register: number;
+  length: number;
+  periodMs: number;
+  count: number;
+  flags: number;
+}> = {}) {
+  return {
+    taskId: 0,
+    address: 0x18,
+    register: 0xa8,
+    length: 6,
+    periodMs: 100,
+    count: 0,
+    flags: 0,
+    ...overrides,
+  };
+}
+
+Deno.test("configureReport writes the golden task slot and reads back the clamped period", async () => {
+  const { backend, transport } = createBackend(REPORT_RESPONSES);
+  await backend.connect("port-1", 115200);
+  const config = await backend.configureReport(reportTask());
+  assert(
+    transport.written.at(-1) ===
+      "AA 02 01 C0 04 09 00 18 A8 06 64 00 00 00 00 B6 55",
+    `REPORT_CONFIG 金帧不符：${transport.written.at(-1)}`,
+  );
+  assert(config.taskId === 0, `taskId 应回显 0，实际 ${config.taskId}`);
+  assert(config.periodMs === 10, `周期应回显钳制后的 10 ms，实际 ${config.periodMs}`);
+  assert(config.onlyChanged, "flags bit0 应解成 onlyChanged");
+  await backend.disconnect();
+});
+
+Deno.test("startReport / stopReport / queryReport / clearReport cover the task table", async () => {
+  const { backend, transport } = createBackend(REPORT_RESPONSES);
+  await backend.connect("port-1", 115200);
+  const info = await backend.startReport();
+  assert(info.started === 2, `应启动 2 个任务，实际 ${info.started}`);
+  assert(info.tickMs === 10, `tickMs 应为 10，实际 ${info.tickMs}`);
+  assert(
+    (transport.written.at(-1) ?? "").startsWith("AA 02 01 C1 04 01 FF"),
+    `REPORT_START 帧头不符：${transport.written.at(-1)}`,
+  );
+
+  const status = await backend.queryReport();
+  assert(status.maxTasks === 4, `maxTasks 应为 4，实际 ${status.maxTasks}`);
+  assert(status.activeCount === 2, `activeCount 应为 2，实际 ${status.activeCount}`);
+  assert(status.tasks.length === 4, `任务表应有 4 行，实际 ${status.tasks.length}`);
+  assert(status.tasks[0].periodMs === 100, "task0 周期应为 100 ms");
+  assert(status.tasks[0].stateText === "运行中", `状态文案不符：${status.tasks[0].stateText}`);
+  assert(status.tasks[2].stateText === "未配置", "空槽位应标为未配置");
+
+  const stopped = await backend.stopReport();
+  assert(stopped.length === 2, `应返回 2 个任务统计，实际 ${stopped.length}`);
+  assert(
+    stopped[0].frames === 120 && stopped[1].frames === 300,
+    `帧数统计不符：${JSON.stringify(stopped)}`,
+  );
+  const idle = await backend.stopReport();
+  assert(idle.length === 0, "未启动时 stopReport 应返回空数组");
+
+  const cleared = await backend.clearReport();
+  assert(cleared === 2, `应清空 2 个槽位，实际 ${cleared}`);
+  await backend.disconnect();
+});
+
+Deno.test("report pump dispatches REPORT_DATA frames with device timestamps", async () => {
+  const { backend, transport } = createBackend(REPORT_RESPONSES);
+  await backend.connect("port-1", 115200);
+  const received: Array<{
+    taskId: number;
+    seq: number;
+    atMs: number;
+    bytes: number[];
+  }> = [];
+  const unsubscribe = backend.subscribeReport((frame) => {
+    received.push({
+      taskId: frame.taskId,
+      seq: frame.seq,
+      atMs: frame.atMs,
+      bytes: frame.bytes,
+    });
+  });
+  await backend.startReport(0x00);
+  for (const [seq, atMs] of [[0, 1234], [1, 1334]] as const) {
+    transport.enqueue(
+      buildFrame(
+        CMD.REPORT_DATA,
+        Uint8Array.of(
+          0x00,
+          0x18,
+          seq,
+          0x00,
+          0x06,
+          atMs & 0xff,
+          (atMs >> 8) & 0xff,
+          (atMs >> 16) & 0xff,
+          (atMs >>> 24) & 0xff,
+          0x80,
+          0x3e,
+          0x00,
+          0x00,
+          0x80,
+          0x3e,
+        ),
+        { from: ADDR_DEVICE, to: ADDR_HOST },
+      ),
+    );
+  }
+  const deadline = Date.now() + 1000;
+  while (received.length < 2 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert(received.length === 2, `应收到 2 帧，实际 ${received.length}`);
+  assert(received[0].taskId === 0, "帧应带任务编号");
+  assert(received[1].seq === 1, `seq 应保持顺序，实际 ${received[1].seq}`);
+  assert(
+    received[1].atMs - received[0].atMs === 100,
+    `atMs 差值应为配置周期 100 ms，实际 ${received[1].atMs - received[0].atMs}`,
+  );
+  assert(received[0].bytes.length === 6, "每帧应带 6 字节原始数据");
+  unsubscribe();
+  await backend.stopReport();
+  await backend.disconnect();
+});
+
+Deno.test("REPORT rejects bad slots, old firmware and STREAM coexistence", async () => {
+  const { backend } = createBackend((cmd, data) => {
+    if (cmd === CMD.ECHO) return [0x00, data[0] ?? 0, data[1] ?? 0];
+    if (cmd === CMD.REPORT_CONFIG) return [0x07]; // ERR_UNSUPPORTED
+    if (cmd === CMD.STREAM_START) return [0x00, 0x01, 0x0a, 0x00, 0x01];
+    if (cmd === CMD.STREAM_STOP) return [0x00, 0x00, 0x00, 0x00, 0x00];
+    return [0x00];
+  });
+  await backend.connect("port-1", 115200);
+  await assertRejects(
+    () => backend.configureReport(reportTask({ periodMs: 0 })),
+    /1–60000/,
+  );
+  await assertRejects(
+    () => backend.configureReport(reportTask({ address: 0x80 })),
+    /0x08–0x77/,
+  );
+  await assertRejects(
+    () => backend.configureReport(reportTask({ taskId: 0x100 })),
+    /0–255/,
+  );
+  await assertRejects(
+    () => backend.configureReport(reportTask()),
+    /REPORT_CONFIG/,
+  );
+  await backend.startStream(streamRequest());
+  await assertRejects(() => backend.startReport(), /STREAM/);
+  await backend.stopStream();
+  await backend.disconnect();
+});
+

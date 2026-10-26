@@ -164,7 +164,7 @@ http://你的域名/stoov-corr/
 git pull
 bun install
 bun run build
-sudo systemctl restart mywebbun
+sudo systemctl restart myweb-deno
 ```
 
 `bun run build` 会进入 `stoov-test` 执行 `deno task build`（纯 Deno 零依赖：拷贝运行时资源 + 轻量压缩 index.html），其余子项目走各自 Bun 构建，`i2c_web_tool` 则执行 `deno install && deno task build`；服务器启动后，工具分别通过以下地址访问：

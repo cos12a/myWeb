@@ -33,7 +33,12 @@ import {
   outputModeById,
 } from "./lis3dh.mjs";
 import { validateAddress, validateByte } from "./protocol.mjs";
-import type { I2cBackend, I2cStreamFrame, I2cStreamRequest } from "./backend.ts";
+import type {
+  I2cBackend,
+  I2cReportFrame,
+  I2cStreamFrame,
+  I2cStreamRequest,
+} from "./backend.ts";
 import type { Lis3dhSample } from "../types.ts";
 
 /** 无响应判定：总线上拉时读“成功”但数据全为 0xFF。 */
@@ -422,6 +427,55 @@ export class Lis3dhController {
           readMode: "block",
           noResponse,
           message: noResponse ? "推送数据全为 0xFF：器件疑似未上电或无应答。" : "",
+        }, frame);
+      }
+    });
+  }
+
+  /**
+   * 订阅 REPORT_DATA 帧并按槽位过滤：LIS3DH 页面的「周期上报」模式用。
+   * 与 subscribeStream 同构（6×N 字节原始数据解码成样本），只是每帧多了
+   * taskId 与设备端采样时间 atMs；停止上报需调用 AutoReport.stop，这里只退订。
+   */
+  subscribeReport(
+    taskId: number,
+    listener: (sample: Lis3dhSample, frame: I2cReportFrame) => void,
+    fullScale = 0,
+  ): () => void {
+    const subscribe = this.#hardware.subscribeReport;
+    if (typeof subscribe !== "function") return () => {};
+    const scale = fullScaleById(fullScale);
+    return subscribe.call(this.#hardware, (frame) => {
+      if (frame.taskId !== taskId) return;
+      let decoded: unknown[] = [];
+      try {
+        decoded = decodeAccelerationBatch(frame.bytes, scale.id);
+      } catch {
+        return;
+      }
+      const noResponse = frame.bytes.length > 0 &&
+        frame.bytes.every((value) => value === NO_RESPONSE_BYTE);
+      for (const item of decoded as Array<{
+        raw: Lis3dhSample["raw"];
+        g: Lis3dhSample["g"];
+        magnitude: number;
+        pitch: number;
+        roll: number;
+      }>) {
+        listener({
+          address: frame.address,
+          at: frame.receivedAt,
+          raw: item.raw,
+          g: item.g,
+          magnitude: item.magnitude,
+          pitch: item.pitch,
+          roll: item.roll,
+          fullScale: scale.id,
+          fullScaleLabel: scale.label,
+          accRange: scale.accRange,
+          readMode: "block",
+          noResponse,
+          message: noResponse ? "上报数据全为 0xFF：器件疑似未上电或无应答。" : "",
         }, frame);
       }
     });

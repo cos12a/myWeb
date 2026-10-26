@@ -9,6 +9,12 @@ import {
   decodeConfigResp,
   decodePingResp,
   decodeReadRegResp,
+  decodeReportClearResp,
+  decodeReportConfigResp,
+  decodeReportData,
+  decodeReportStartResp,
+  decodeReportStatusResp,
+  decodeReportStopResp,
   decodeScanResp,
   decodeStreamData,
   decodeStreamStartResp,
@@ -20,6 +26,11 @@ import {
   encodeConfigSet,
   encodePing,
   encodeReadReg,
+  encodeReportClear,
+  encodeReportConfig,
+  encodeReportStart,
+  encodeReportStatus,
+  encodeReportStop,
   encodeStreamStart,
   encodeStreamStop,
   encodeVarint,
@@ -307,6 +318,184 @@ Deno.test("STREAM_STOP and STREAM_DATA round-trip", () => {
     Uint8Array.of(0x18, 0x08, 0x00, 0x0c, ...new Array(12).fill(0x11)),
   );
   assertEquals(multi.bytes.length, 12);
+});
+
+// —— 周期自动上报（REPORT_*，AR-1.0）——
+// 金帧与 docs/AUTO_REPORT_PROTOCOL.md §4–§9 逐字节一致，不得手算 CRC。
+
+Deno.test("REPORT command codes keep the varint mapping stable", () => {
+  assertEquals(CMD.REPORT_CONFIG, 0x0240);
+  assertEquals(CMD.REPORT_START, 0x0241);
+  assertEquals(CMD.REPORT_STOP, 0x0242);
+  assertEquals(CMD.REPORT_STATUS, 0x0243);
+  assertEquals(CMD.REPORT_CLEAR, 0x0244);
+  assertEquals(CMD.REPORT_DATA, 0x0245);
+  assertEquals(toHex(encodeVarint(CMD.REPORT_CONFIG)), "C0 04");
+  assertEquals(toHex(encodeVarint(CMD.REPORT_START)), "C1 04");
+  assertEquals(toHex(encodeVarint(CMD.REPORT_STOP)), "C2 04");
+  assertEquals(toHex(encodeVarint(CMD.REPORT_STATUS)), "C3 04");
+  assertEquals(toHex(encodeVarint(CMD.REPORT_CLEAR)), "C4 04");
+  assertEquals(toHex(encodeVarint(CMD.REPORT_DATA)), "C5 04");
+});
+
+Deno.test("REPORT_CONFIG encodes a task slot and decodes the clamped reply", () => {
+  const lis3dh = encodeReportConfig({
+    taskId: 0,
+    address: 0x18,
+    register: 0xa8,
+    length: 6,
+    periodMs: 100,
+    count: 0,
+    flags: 0,
+  });
+  assertEquals(toHex(lis3dh), "00 18 A8 06 64 00 00 00 00");
+  assertEquals(
+    toHex(buildFrame(CMD.REPORT_CONFIG, lis3dh)),
+    "AA 02 01 C0 04 09 00 18 A8 06 64 00 00 00 00 B6 55",
+  );
+  // 省略 count/flags 时按 0 写入（连续推送、无附加能力）
+  const mlx = encodeReportConfig({
+    taskId: 1,
+    address: 0x5a,
+    register: 0x07,
+    length: 3,
+    periodMs: 1000,
+  });
+  assertEquals(toHex(mlx), "01 5A 07 03 E8 03 00 00 00");
+  assertEquals(
+    toHex(buildFrame(CMD.REPORT_CONFIG, mlx)),
+    "AA 02 01 C0 04 09 01 5A 07 03 E8 03 00 00 00 6E 55",
+  );
+
+  assertEquals(
+    decodeReportConfigResp(Uint8Array.of(0x00, 0x00, 0x64, 0x00, 0x00)),
+    { taskId: 0, periodMs: 100, flags: 0, onlyChanged: false },
+  );
+  // 固件把 periodMs 钳到 tick、并声明支持 ONLY_CHANGED
+  assertEquals(
+    decodeReportConfigResp(Uint8Array.of(0x00, 0x03, 0x0a, 0x00, 0x01)),
+    { taskId: 3, periodMs: 10, flags: 1, onlyChanged: true },
+  );
+  assertThrows(
+    () => encodeReportConfig({ taskId: 0, address: 0x18, register: 0xa8, length: 0, periodMs: 100 }),
+    /1–192/,
+  );
+  assertThrows(
+    () =>
+      encodeReportConfig({ taskId: 0, address: 0x18, register: 0xa8, length: 193, periodMs: 100 }),
+    /1–192/,
+  );
+  assertThrows(() => decodeReportConfigResp(Uint8Array.of(0x01, 0x00)), /REPORT_CONFIG/);
+});
+
+Deno.test("REPORT_START/STOP/CLEAR golden frames round-trip", () => {
+  assertEquals(
+    toHex(buildFrame(CMD.REPORT_START, encodeReportStart(0xff))),
+    "AA 02 01 C1 04 01 FF 7A 55",
+  );
+  const [startFrame] = new FrameDecoder().push(
+    bytesOf("AA 01 02 C1 04 04 00 02 0A 00 24 55"),
+  );
+  assertEquals(startFrame.cmd, CMD.REPORT_START);
+  assertEquals(decodeReportStartResp(startFrame.data), { started: 2, tickMs: 10 });
+
+  assertEquals(
+    toHex(buildFrame(CMD.REPORT_STOP, encodeReportStop(0xff))),
+    "AA 02 01 C2 04 01 FF F2 55",
+  );
+  const [stopFrame] = new FrameDecoder().push(
+    bytesOf("AA 01 02 C2 04 0C 00 02 00 78 00 00 00 01 2C 01 00 00 96 55"),
+  );
+  assertEquals(stopFrame.cmd, CMD.REPORT_STOP);
+  assertEquals(decodeReportStopResp(stopFrame.data), {
+    tasks: [{ taskId: 0, frames: 120 }, { taskId: 1, frames: 300 }],
+  });
+
+  assertEquals(toHex(encodeReportStatus()), "");
+  assertEquals(toHex(encodeReportClear()), "");
+  assertEquals(
+    toHex(buildFrame(CMD.REPORT_CLEAR, encodeReportClear())),
+    "AA 02 01 C4 04 00 FA 55",
+  );
+  assertEquals(decodeReportClearResp(Uint8Array.of(0x00, 0x02)), { cleared: 2 });
+  assertThrows(() => decodeReportStopResp(Uint8Array.of(0x00, 0x02, 0x00, 0x78)), /不足/);
+});
+
+Deno.test("REPORT_STATUS decodes the fixed-length task table", () => {
+  const [frame] = new FrameDecoder().push(
+    bytesOf(
+      "AA 01 02 C3 04 23 00 01 04 02 0A 00 04 00 18 A8 06 64 00 02 " +
+        "01 5A 07 03 E8 03 02 02 00 00 00 00 00 00 03 00 00 00 00 00 00 C1 55",
+    ),
+  );
+  assertEquals(frame.cmd, CMD.REPORT_STATUS);
+  const status = decodeReportStatusResp(frame.data);
+  assertEquals(status.version, 1);
+  assertEquals(status.maxTasks, 4);
+  assertEquals(status.activeCount, 2);
+  assertEquals(status.tickMs, 10);
+  assertEquals(status.tasks.length, 4);
+  assertEquals(status.tasks[0], {
+    taskId: 0,
+    address: 0x18,
+    register: 0xa8,
+    length: 6,
+    periodMs: 100,
+    state: 2,
+    stateText: "运行中",
+  });
+  assertEquals(status.tasks[1].periodMs, 1000);
+  assertEquals(status.tasks[2], {
+    taskId: 2,
+    address: 0,
+    register: 0,
+    length: 0,
+    periodMs: 0,
+    state: 0,
+    stateText: "未配置",
+  });
+  // taskCount 必须等于 maxTasks
+  assertThrows(
+    () => decodeReportStatusResp(bytesOf("00 01 04 00 0A 00 03 00 18 A8 06 64 00 00")),
+    /不一致/,
+  );
+  // 槽位数超上限（17 > 16）
+  assertThrows(
+    () => decodeReportStatusResp(bytesOf("00 01 11 00 0A 00 11")),
+    /超过上限/,
+  );
+});
+
+Deno.test("REPORT_DATA decodes task id, sequence and device timestamp", () => {
+  const [first] = new FrameDecoder().push(
+    bytesOf("AA 01 02 C5 04 0F 00 18 00 00 06 D2 04 00 00 80 3E 00 00 80 3E EB 55"),
+  );
+  assertEquals(first.cmd, CMD.REPORT_DATA);
+  const sample = decodeReportData(first.data);
+  assertEquals(sample.taskId, 0);
+  assertEquals(sample.address, 0x18);
+  assertEquals(sample.seq, 0);
+  assertEquals(sample.length, 6);
+  assertEquals(sample.atMs, 1234);
+  assertEquals([...sample.bytes], [0x80, 0x3e, 0x00, 0x00, 0x80, 0x3e]);
+
+  const [second] = new FrameDecoder().push(
+    bytesOf("AA 01 02 C5 04 0F 00 18 01 00 06 36 05 00 00 00 C1 00 00 00 C1 21 55"),
+  );
+  const next = decodeReportData(second.data);
+  assertEquals(next.seq, 1);
+  // atMs 为设备毫秒时基，相邻差值是真实采样间隔；回绕用 u32 无符号差值
+  assertEquals((next.atMs - sample.atMs) >>> 0, 100);
+
+  // 尾部多余字节按 length 截断（为将来扩展字段留位）
+  const padded = decodeReportData(
+    Uint8Array.of(0x02, 0x5a, 0x09, 0x00, 0x02, 0xe8, 0x03, 0x00, 0x00, 0xaa, 0xbb, 0xcc),
+  );
+  assertEquals([...padded.bytes], [0xaa, 0xbb]);
+  assertEquals(padded.atMs, 1000);
+
+  assertThrows(() => decodeReportData(bytesOf("00 18 00 00 06 D2 04 00 00 80")), /不足/);
+  assertThrows(() => decodeReportData(bytesOf("00 18 00 00 C1")), /超过上限/);
 });
 
 function assertEquals(actual: unknown, expected: unknown): void {

@@ -10,6 +10,12 @@ import type {
   I2cBusConfig,
   I2cBusConfigPatch,
   I2cCapabilities,
+  I2cReportConfig,
+  I2cReportFrame,
+  I2cReportInfo,
+  I2cReportStatus,
+  I2cReportStopped,
+  I2cReportTask,
   I2cSwapResult,
   I2cStreamFrame,
   I2cStreamInfo,
@@ -38,12 +44,14 @@ import type {
   TransportKind,
 } from "./types.ts";
 import type { ConnectRequest } from "./serial/backend.ts";
+import { AutoReportController } from "./serial/auto_report.ts";
 import { Ch224Controller } from "./serial/ch224.ts";
 import { Lis3dhController } from "./serial/lis3dh.ts";
 import { Mlx90614Controller } from "./serial/mlx90614.ts";
 import { SerialLwpktBackend } from "./serial/serial_lwpkt.ts";
 
 const backend = new SerialLwpktBackend();
+const autoReport = new AutoReportController(backend);
 const ch224 = new Ch224Controller(backend);
 const mlx = new Mlx90614Controller(backend);
 const lis3dh = new Lis3dhController(backend);
@@ -100,6 +108,23 @@ export const api = {
     backend.eepromRead(type, address, length) as Promise<TransferResult>,
   eepromWrite: (type: number, address: number, writeHex: string) =>
     backend.eepromWrite(type, address, writeHex),
+
+  // —— 周期自动上报（REPORT_*，AR-1.0）——
+  // 旧固件对 REPORT_* 返回 ERR_UNSUPPORTED，调用方转成“固件不支持”提示。
+  autoReportSupports: (): Promise<boolean> =>
+    Promise.resolve(autoReport.supportsReport()),
+  autoReportConfigure: (task: I2cReportTask): Promise<I2cReportConfig> =>
+    autoReport.configure(task),
+  autoReportStart: (taskId?: number): Promise<I2cReportInfo> =>
+    autoReport.start(taskId),
+  autoReportStop: (taskId?: number): Promise<I2cReportStopped[]> =>
+    autoReport.stop(taskId),
+  autoReportStatus: (): Promise<I2cReportStatus> => autoReport.status(),
+  autoReportClear: (): Promise<number> => autoReport.clear(),
+  /** 订阅 REPORT_DATA 帧（已含 taskId/seq/atMs）；返回取消订阅函数。 */
+  autoReportSubscribe: (
+    listener: (frame: I2cReportFrame) => void,
+  ): (() => void) => autoReport.subscribe(listener),
 
   ch224Discover: () => ch224.discover(),
   // .mjs 纯逻辑层没有 JSDoc 类型，返回值按 types.ts 契约收口。
@@ -213,6 +238,12 @@ export const api = {
     listener: (sample: Lis3dhSample, frame: I2cStreamFrame) => void,
     fullScale: number,
   ): (() => void) => lis3dh.subscribeStream(listener, fullScale),
+  /** 订阅指定上报槽位的 REPORT_DATA 帧（LIS3DH 页「周期上报」模式）。 */
+  lis3dhSubscribeReport: (
+    taskId: number,
+    listener: (sample: Lis3dhSample, frame: I2cReportFrame) => void,
+    fullScale: number,
+  ): (() => void) => lis3dh.subscribeReport(taskId, listener, fullScale),
   lis3dhConfigure: (
     address: number,
     config: Lis3dhConfig,

@@ -8,6 +8,13 @@ import type {
   I2cBusConfig,
   I2cBusConfigPatch,
   I2cCapabilities,
+  I2cReportConfig,
+  I2cReportFrame,
+  I2cReportInfo,
+  I2cReportStatus,
+  I2cReportStopped,
+  I2cReportSummary,
+  I2cReportTask,
   I2cStreamFrame,
   I2cStreamInfo,
   I2cStreamRequest,
@@ -32,6 +39,7 @@ import {
   CMD,
   FrameDecoder,
   LwpktError,
+  REPORT_LIMITS,
   STATUS,
   buildFrame,
   decodeBusSelectResp,
@@ -41,6 +49,12 @@ import {
   decodePingResp,
   decodeReadBlockResp,
   decodeReadRegResp,
+  decodeReportClearResp,
+  decodeReportConfigResp,
+  decodeReportData,
+  decodeReportStartResp,
+  decodeReportStatusResp,
+  decodeReportStopResp,
   decodeScanResp,
   decodeStreamData,
   decodeStreamStartResp,
@@ -58,6 +72,11 @@ import {
   encodeReadMem16,
   encodeReadRaw,
   encodeReadReg,
+  encodeReportClear,
+  encodeReportConfig,
+  encodeReportStart,
+  encodeReportStatus,
+  encodeReportStop,
   encodeStreamStart,
   encodeStreamStop,
   encodeWriteRaw,
@@ -73,6 +92,7 @@ import {
   validateByte,
   validateEeprom,
 } from "./protocol.mjs";
+import { formatIntPin, validateIntPin } from "./int_pins.mjs";
 
 // 固件载荷上限（docs/05 §7）
 const MAX_BLOCK_LEN = 255; // READ_BLOCK/READ_RAW 单次
@@ -84,6 +104,11 @@ const BUS_CONFIG_TIMEOUT_MS = 5000;
 
 /** ESP32 控制台 UART0 占用 GPIO43/44，固件同样拒绝这两个引脚。 */
 const RESERVED_BUS_PINS = new Set([43, 44]);
+
+/** REPORT_START / REPORT_STOP 的「全部任务」编号。 */
+const REPORT_ALL_TASKS = 0xff;
+/** 上报周期软上限：AR-1.0 建议 10 ms–60 s，只在发送前拦明显越界值。 */
+const REPORT_PERIOD_MAX_MS = 60_000;
 
 /** 流式泵的让位间隔：等待请求-应答完成时短暂休眠。 */
 function sleepMs(ms: number): Promise<void> {
@@ -108,6 +133,37 @@ function validateBusFrequency(value: number): void {
     throw new RangeError(
       "I²C 频率必须为 1,000–1,000,000 Hz（1 kHz–1 MHz）。",
     );
+  }
+}
+
+/** 校验一个上报任务槽位：越界在发送前就报错，不浪费一次往返。 */
+function validateReportTask(task: I2cReportTask): void {
+  validateReportTaskId(task.taskId);
+  validateAddress(task.address);
+  validateByte(task.register, "寄存器地址");
+  if (
+    !Number.isInteger(task.length) || task.length < 1 ||
+    task.length > REPORT_LIMITS.length
+  ) {
+    throw new RangeError(`上报长度必须为 1–${REPORT_LIMITS.length} 字节。`);
+  }
+  if (
+    !Number.isInteger(task.periodMs) || task.periodMs < 1 ||
+    task.periodMs > REPORT_PERIOD_MAX_MS
+  ) {
+    throw new RangeError(`上报周期必须为 1–${REPORT_PERIOD_MAX_MS} ms。`);
+  }
+  if (!Number.isInteger(task.count) || task.count < 0 || task.count > 0xffff) {
+    throw new RangeError("上报帧数上限必须为 0–65,535 的整数（0 = 连续）。");
+  }
+  if (!Number.isInteger(task.flags) || task.flags < 0 || task.flags > 0xff) {
+    throw new RangeError("上报能力位必须为 0–255 的整数。");
+  }
+}
+
+function validateReportTaskId(taskId: number): void {
+  if (!Number.isInteger(taskId) || taskId < 0 || taskId > 0xff) {
+    throw new RangeError("上报任务编号必须为 0–255 的整数（0xFF = 全部）。");
   }
 }
 
@@ -214,9 +270,17 @@ export class LwpktBackend implements I2cBackend {
   /** 流式状态：设备主动上报（STREAM_*）是否进行中。 */
   #streaming = false;
   #streamFrames = 0;
-  #streamPumpId = 0;
   #streamListeners = new Set<(frame: I2cStreamFrame) => void>();
-  /** 帧读写互斥链：请求-应答与流式泵共用，避免争抢字节流。 */
+  /** 周期自动上报（REPORT_*）是否进行中；与 #streaming 互斥。 */
+  #reporting = false;
+  #reportFrames = 0;
+  #reportListeners = new Set<(frame: I2cReportFrame) => void>();
+  /** 已单独启动的任务槽位：与 #reportAllStarted 一起决定接收泵何时退出。 */
+  #reportRunning = new Set<number>();
+  #reportAllStarted = false;
+  /** 接收泵代号：STREAM 与 REPORT 共用同一个泵，递增即让旧循环退出。 */
+  #receivePumpId = 0;
+  /** 帧读写互斥链：请求-应答与接收泵共用，避免争抢字节流。 */
   #lockChain: Promise<unknown> = Promise.resolve();
 
   constructor(options: SerialBackendOptions = {}) {
@@ -321,6 +385,13 @@ export class LwpktBackend implements I2cBackend {
         // 断开流程不因停止失败而中断，本地状态由 #clearConnection 收口。
       }
     }
+    if (this.#reporting) {
+      try {
+        await this.stopReport(REPORT_ALL_TASKS);
+      } catch {
+        // 同上：固件不应答也不阻塞断开。
+      }
+    }
     this.#clearConnection();
     await this.#manager.close();
     return this.status();
@@ -339,8 +410,13 @@ export class LwpktBackend implements I2cBackend {
     this.#baud = null;
     this.#capabilities = null;
     this.#streaming = false;
-    this.#streamPumpId += 1;
     this.#streamFrames = 0;
+    this.#reporting = false;
+    this.#reportFrames = 0;
+    this.#reportRunning.clear();
+    this.#reportAllStarted = false;
+    this.#reportListeners.clear();
+    this.#receivePumpId += 1;
   }
 
   async scan(start = 0x08, end = 0x77) {
@@ -791,6 +867,10 @@ export class LwpktBackend implements I2cBackend {
               this.#dispatchStreamFrame(frame.data);
               continue;
             }
+            if (frame.cmd === CMD.REPORT_DATA) {
+              this.#dispatchReportFrame(frame.data);
+              continue;
+            }
             if (frame.cmd !== cmd) continue;
             this.#frames += 1;
             return frame.data;
@@ -839,6 +919,14 @@ export class LwpktBackend implements I2cBackend {
     if (this.#streaming) {
       throw new Error("流式采集已在进行中，请先停止。");
     }
+    if (this.#reporting) {
+      throw new Error("周期自动上报运行中，请先停止 REPORT 再启动流式采集。");
+    }
+    const pinError = validateIntPin(request.intPin, {
+      machine: this.#capabilities?.machine ?? "unknown",
+      pins: this.#capabilities?.pins ?? [],
+    });
+    if (pinError) throw new Error(pinError);
     const data = await this.#request(
       CMD.STREAM_START,
       encodeStreamStart(request),
@@ -848,8 +936,11 @@ export class LwpktBackend implements I2cBackend {
     const mode: "poll" | "int" = info.mode === "int" ? "int" : "poll";
     this.#streaming = true;
     this.#streamFrames = 0;
-    void this.#runStreamPump();
-    const pinText = request.intPin === 0xff ? "固件默认引脚" : `GPIO${request.intPin}`;
+    void this.#runReceivePump();
+    const pinText = formatIntPin(
+      request.intPin,
+      this.#capabilities?.machine ?? "unknown",
+    );
     const modeText = mode === "int"
       ? info.intSupported === false
         ? `固件回退为定时推送（未声明中断支持），引脚 ${pinText} 仅供参考`
@@ -867,7 +958,6 @@ export class LwpktBackend implements I2cBackend {
   async stopStream(): Promise<{ frames: number }> {
     if (!this.#streaming) return { frames: 0 };
     this.#streaming = false;
-    this.#streamPumpId += 1;
     const data = await this.#request(
       CMD.STREAM_STOP,
       encodeStreamStop(),
@@ -877,6 +967,8 @@ export class LwpktBackend implements I2cBackend {
     );
     const { frames } = decodeStreamStopResp(data);
     this.#streamFrames = 0;
+    // REPORT 仍在运行时不能杀泵，否则自动上报帧会无人收取。
+    if (!this.#reporting) this.#receivePumpId += 1;
     return { frames };
   }
 
@@ -886,6 +978,117 @@ export class LwpktBackend implements I2cBackend {
     return () => {
       this.#streamListeners.delete(listener);
     };
+  }
+
+  /**
+   * 周期自动上报（AR-1.0）：写入一个任务槽位。
+   * 固件对运行中的槽位回 ERR_ARG，调用方需先 `stopReport(taskId)`；
+   * 应答里的 `periodMs` 是钳制后的实际值，后续时间轴以它为准。
+   */
+  async configureReport(task: I2cReportTask): Promise<I2cReportConfig> {
+    validateReportTask(task);
+    const data = await this.#request(
+      CMD.REPORT_CONFIG,
+      encodeReportConfig({
+        ...task,
+        count: task.count ?? 0,
+        flags: task.flags ?? 0,
+      }),
+      "自动上报配置",
+    );
+    return decodeReportConfigResp(data) as I2cReportConfig;
+  }
+
+  /**
+   * 启动任务表（默认 0xFF = 全部已配置任务）。
+   * 与 `STREAM_*` 互斥：固件也应对同时开启回 ERR_ARG。
+   */
+  async startReport(taskId: number = REPORT_ALL_TASKS): Promise<I2cReportInfo> {
+    if (this.#streaming) {
+      throw new Error("中断推送运行中，请先停止 STREAM 再启动自动上报。");
+    }
+    validateReportTaskId(taskId);
+    const data = await this.#request(
+      CMD.REPORT_START,
+      encodeReportStart(taskId),
+      "自动上报启动",
+    );
+    const info = decodeReportStartResp(data) as I2cReportInfo;
+    this.#reporting = true;
+    if (taskId === REPORT_ALL_TASKS) {
+      this.#reportAllStarted = true;
+    } else {
+      this.#reportRunning.add(taskId);
+    }
+    void this.#runReceivePump();
+    return info;
+  }
+
+  /**
+   * 停止任务表（默认全部）并返回固件侧帧数统计。
+   * 与 `stopStream` 同理使用 waitBusy：允许等完在途的读/写请求再发。
+   */
+  async stopReport(
+    taskId: number = REPORT_ALL_TASKS,
+  ): Promise<I2cReportStopped[]> {
+    if (!this.#reporting) return [];
+    validateReportTaskId(taskId);
+    const data = await this.#request(
+      CMD.REPORT_STOP,
+      encodeReportStop(taskId),
+      "自动上报停止",
+      undefined,
+      true,
+    );
+    const { tasks } = decodeReportStopResp(data) as {
+      tasks: I2cReportStopped[];
+    };
+    for (const item of tasks) this.#reportRunning.delete(item.taskId);
+    const allStopped = taskId === REPORT_ALL_TASKS ||
+      (this.#reportRunning.size === 0 && !this.#reportAllStarted);
+    if (allStopped) this.#stopReportPump();
+    return tasks;
+  }
+
+  /** 查询任务表快照（固件只回内存，不访问 I²C）。 */
+  async queryReport(): Promise<I2cReportStatus> {
+    const data = await this.#request(
+      CMD.REPORT_STATUS,
+      encodeReportStatus(),
+      "自动上报状态",
+    );
+    return decodeReportStatusResp(data) as I2cReportStatus;
+  }
+
+  /** 停止全部并清空任务表，返回被清空的槽位数。 */
+  async clearReport(): Promise<number> {
+    const data = await this.#request(
+      CMD.REPORT_CLEAR,
+      encodeReportClear(),
+      "自动上报清空",
+      undefined,
+      true,
+    );
+    const { cleared } = decodeReportClearResp(data);
+    this.#stopReportPump();
+    this.#reportRunning.clear();
+    this.#reportAllStarted = false;
+    return cleared;
+  }
+
+  /** 订阅 REPORT_DATA 帧；返回取消订阅函数。 */
+  subscribeReport(listener: (frame: I2cReportFrame) => void): () => void {
+    this.#reportListeners.add(listener);
+    return () => {
+      this.#reportListeners.delete(listener);
+    };
+  }
+
+  /** 让接收泵退出（仅当 STREAM 也不在运行时），并清空本地统计。 */
+  #stopReportPump(): void {
+    this.#reporting = false;
+    this.#reportFrames = 0;
+    if (!this.#streaming) this.#receivePumpId += 1;
   }
 
   /** 解析 STREAM_DATA 并广播给订阅者；仅在流式运行中生效。 */
@@ -913,17 +1116,49 @@ export class LwpktBackend implements I2cBackend {
     }
   }
 
+  /** 解析 REPORT_DATA 并广播给订阅者；仅在自动上报运行中生效。 */
+  #dispatchReportFrame(data: Uint8Array): void {
+    if (!this.#reporting) return;
+    let decoded: ReturnType<typeof decodeReportData>;
+    try {
+      decoded = decodeReportData(data);
+    } catch {
+      return;
+    }
+    this.#reportFrames += 1;
+    const frame: I2cReportFrame = {
+      taskId: decoded.taskId,
+      address: decoded.address,
+      seq: decoded.seq,
+      length: decoded.length,
+      atMs: decoded.atMs,
+      bytes: [...decoded.bytes],
+      receivedAt: Date.now(),
+    };
+    for (const listener of this.#reportListeners) {
+      try {
+        listener(frame);
+      } catch {
+        // 监听器异常不影响接收泵。
+      }
+    }
+  }
+
   /**
    * 接收泵：在没有请求-应答时每轮读一次传输（≤10ms，不长时间占锁），
-   * 把 STREAM_DATA 帧分发出去；请求-应答优先（#busy 时让位）。
+   * 把 STREAM_DATA / REPORT_DATA 帧分发出去；请求-应答优先（#busy 时让位）。
+   * STREAM 与 REPORT 共用同一个泵与同一把锁，不新开第二个泵。
    */
-  async #runStreamPump(): Promise<void> {
-    this.#streamPumpId += 1;
-    const pumpId = this.#streamPumpId;
-    while (this.#streaming && pumpId === this.#streamPumpId) {
+  async #runReceivePump(): Promise<void> {
+    this.#receivePumpId += 1;
+    const pumpId = this.#receivePumpId;
+    while (
+      (this.#streaming || this.#reporting) && pumpId === this.#receivePumpId
+    ) {
       const transport = this.#transport;
       if (transport === null) {
         this.#streaming = false;
+        this.#reporting = false;
         break;
       }
       if (this.#busy) {
@@ -932,13 +1167,20 @@ export class LwpktBackend implements I2cBackend {
       }
       try {
         await this.#withLock(async () => {
-          if (!this.#streaming || pumpId !== this.#streamPumpId) return;
+          if (
+            !(this.#streaming || this.#reporting) ||
+            pumpId !== this.#receivePumpId
+          ) {
+            return;
+          }
           if (this.#busy) return;
           const frames = this.#decoder.push(await transport.read(10));
           for (const frame of frames) {
             if (frame.from !== ADDR_DEVICE || frame.to !== ADDR_HOST) continue;
             if (frame.cmd === CMD.STREAM_DATA) {
               this.#dispatchStreamFrame(frame.data);
+            } else if (frame.cmd === CMD.REPORT_DATA) {
+              this.#dispatchReportFrame(frame.data);
             }
           }
         });

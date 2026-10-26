@@ -2,7 +2,7 @@
 
 在浏览器里直接操作 I²C 总线：通过 **Web Serial** 或 **Web Bluetooth（BLE NUS 串口）**
 连接运行 ESP32-Bus-Pirate 固件的设备，用 LWPKT 帧协议完成 I²C 引脚/频率设置、扫描、
-寄存器读写、EEPROM、CH224A PD 取电、MLX90614 测温与 LIS3DH 三轴加速度。Deno + Hono 只负责托管静态资源，
+寄存器读写、EEPROM、CH224A PD 取电、MLX90614 测温、LIS3DH 三轴加速度与周期自动上报。Deno + Hono 只负责托管静态资源，
 硬件访问全部发生在浏览器端。
 
 - 无本地服务、无 DLL、无 FFI：打开网页即可用。
@@ -21,7 +21,13 @@
 - [docs/ESP32_FIRMWARE_PROTOCOL.md](./docs/ESP32_FIRMWARE_PROTOCOL.md)：ESP32 CAPS v2 能力/引脚上报纸质协议指引（字节布局、金帧、固件实现与验收）。
 - [docs/ESP32-I2C-PINMAP.md](./docs/ESP32-I2C-PINMAP.md)：ESP32/S2/S3/C3/C6 的 Flash、PSRAM、USB、UART0、strap 与仅输入引脚参考。
 - [docs/STM32-I2C-PINMAP.md](./docs/STM32-I2C-PINMAP.md)：STM32 各系列 I2C1–I2C4 引脚、备用引脚与 CAPS 表模板。
-- [docs/LIS3DH_STREAM_PROTOCOL.md](./docs/LIS3DH_STREAM_PROTOCOL.md)：LIS3DH 主动数据推送（STREAM `0x0230`–`0x0232`）字节布局、金帧、INT1 接线、固件参考实现与验收清单。
+- [docs/LIS3DH_STREAM_PROTOCOL.md](./docs/LIS3DH_STREAM_PROTOCOL.md)：LIS3DH 主动数据推送（STREAM `0x0230`–`0x0232`）字节布局、金帧、INT1 接线与 ESP32/STM32 中断引脚定义、固件参考实现与验收清单。
+- [docs/AUTO_REPORT_REQUIREMENTS.md](./docs/AUTO_REPORT_REQUIREMENTS.md)：周期自动上报需求（`AR-1.0`）——背景、用户故事、FR/NFR、与既有读取模式对比、验收标准与风险。
+- [docs/AUTO_REPORT_PROTOCOL.md](./docs/AUTO_REPORT_PROTOCOL.md)：**设备端协议接口**（`REPORT_* 0x0240–0x0245`）——多任务表、调度算法、`atMs` 设备时间戳、金帧、固件参考实现与验收清单。
+- [docs/AUTO_REPORT_DESIGN.md](./docs/AUTO_REPORT_DESIGN.md)：上位机实现契约（编解码/类型/后端/控制器/UI）与 Phase A–C 排期；**协议已定稿，上位机 Phase A/B/C 均已实现，固件待实现**。
+- [docs/AUTO_REPORT_FIRMWARE_AI_TASK.md](./docs/AUTO_REPORT_FIRMWARE_AI_TASK.md)：**设备端实现任务书**（`TASK-I2C-AR-001`，给固件 AI 直接照做）——命令分派、任务表/调度器 C 参考、LIS3DH 页专项约定、八步金帧自检、联调判定、交付模板与验收清单。
+- [docs/reference/auto_report/](./docs/reference/auto_report/README.md)：**设备端参考实现**（`REF-I2C-AR-001`，C11）——五命令 + 调度器 + `ar_port.h` 移植层 + ESP32/STM32 示例 + host 自测（273 项 0 失败，帧编码与上位机 `buildFrame()` 对拍 72 组一致）。
+- [docs/VERSION_HISTORY.md](./docs/VERSION_HISTORY.md) · [docs/README.md](./docs/README.md)：协议注册表、命令号分配与兼容性策略；全部文档的编号/版本/日期/状态索引。
 - [`.agents/skills/web-serial-lwpkt-i2c/SKILL.md`](../.agents/skills/web-serial-lwpkt-i2c/SKILL.md)：给编码代理的模块地图与改动指南。
 - [`.agents/skills/esp32-i2c-caps-firmware/SKILL.md`](../.agents/skills/esp32-i2c-caps-firmware/SKILL.md)：ESP32 固件侧 CAPS v2 上报的实现指南。
 
@@ -129,7 +135,7 @@ deno task start       # Hono 托管 http://127.0.0.1:8787
 | 页面刷新/关闭 | 浏览器释放设备 | 浏览器释放设备 |
 
 - 被动断开后 manager 会记录补清理 Promise；下一次连接前自动等待，避免旧 reader/writer 锁未释放导致“端口被占用”。
-- MLX90614 / LIS3DH 自动轮询在断开时停止并复位开关；LIS3DH 流式推送在断开时自动退订并停推。
+- MLX90614 / LIS3DH 自动轮询在断开时停止并复位开关；LIS3DH 流式推送在断开时自动退订并停推；LIS3DH 页的周期上报在离开模式 / 换地址 / 卸载 / 断开时 `REPORT_STOP` 本页槽位；周期自动上报在断开前先 `REPORT_STOP(0xFF)`，接收泵随之退出。
 - 详细时序见 [docs/PROGRAM_FLOW.md](./docs/PROGRAM_FLOW.md) 第 6 节，资源清单见 [docs/TRANSPORT_MODULES.md](./docs/TRANSPORT_MODULES.md) 第 6.6 节。
 
 ## 功能页
@@ -140,7 +146,8 @@ deno task start       # Hono 托管 http://127.0.0.1:8787
 | I²C 操作台 | ✅ | 总线扫描、单字节寄存器读写、原始传输、24Cxx EEPROM 读写 |
 | CH224A PD 取电 | ✅ | 读取 Source Capabilities、固定 PDO / PPS / AVS / QC 取电 |
 | MLX90614 测温 | ✅ | 温度轮询与曲线、16 位寄存器读写、发射率 |
-| LIS3DH 三轴加速度 | ✅ | 三种读取模式（单次轮询 / FIFO 批量 / 中断推送）、输出模式三档与全 ODR 表、FIFO 与 INT1 路由配置、CSS 3D 姿态视图、温度通道、37 条寄存器表 |
+| LIS3DH 三轴加速度 | ✅ | 四种读取模式（单次轮询 / FIFO 批量 / 中断推送 / 周期上报）、平台化中断引脚定义（ESP32 自由引脚 / STM32 `port*16+pin`）、输出模式三档与全 ODR 表、FIFO 与 INT1 路由配置、SVG 等轴测姿态视图（地面网格 / 倾斜器件板 / 发光矢量）、温度通道、37 条寄存器表 |
+| 周期自动上报 | ⚠️ 上位机就绪 | `REPORT_* 0x0240–0x0245`：最多 16 个任务槽位、每槽独立地址/寄存器/长度/周期/帧数上限/仅变化上报；任务表快照 + 启动/停止/清空 + 按 taskId 的实时数据卡（帧数/丢帧/设备间隔）。**需固件实现 REPORT_* 才能收到数据**，旧固件会提示升级 |
 | SPI | ⛔ | 串口 LWPKT 固件不支持 SPI，本工具不提供该页 |
 
 原始传输的语义：发送数据首字节是 **8 位写地址**（`7 位地址 << 1`），
@@ -159,14 +166,14 @@ deno task start       # Hono 托管 http://127.0.0.1:8787
 - **操作记录紧贴「总线操作」**：`.workspace` 右栏用 `.operations-column` 把两者上下叠放，
   宽度与「总线操作」一致，不再横跨整行；窄屏（≤820px）自动落到侧栏下方。
 - **连接只在「I²C 操作台」**：串口 / 蓝牙、设备选择、波特率、断开统一在侧栏「设备连接」完成；
-  CH224A / MLX90614 / LIS3DH 页不再自带连接区（顶部大框已移除），未连接时顶部只留一行
-  「请先在 I²C 操作台连接」的可点击提示，四个页面共用同一条连接。
+  CH224A / MLX90614 / LIS3DH / 周期自动上报页不再自带连接区（顶部大框已移除），未连接时顶部只留一行
+  「请先在 I²C 操作台连接」的可点击提示，五个页面共用同一条连接。
 
 ## 架构
 
 ```text
 浏览器
-├─ src/ui/                     React 界面（I²C / CH224 / MLX90614 / LIS3DH）
+├─ src/ui/                     React 界面（I²C / CH224 / MLX90614 / LIS3DH / 周期自动上报）
 ├─ src/api.ts                  本地适配器：UI → 后端（无 HTTP）
 ├─ src/transport/
 │  ├─ types.ts                 ByteTransport / TransportProvider / 事件类型
@@ -178,6 +185,8 @@ deno task start       # Hono 托管 http://127.0.0.1:8787
 │  ├─ ble_nus_transport.ts     BLE NUS Provider + GATT/通知/分片
 │  ├─ ch224.ts / mlx90614.ts / lis3dh.ts
 │  │                          器件控制器（全部 async）
+│  ├─ auto_report.ts / auto_report.mjs
+│  │                          自动上报控制器与纯逻辑（归一化 / 回绕 / 丢帧）
 │  ├─ lwpkt.mjs / protocol.mjs 纯逻辑：分帧、CRC、编解码、校验
 │  └─ ch224.mjs / mlx90614.mjs / lis3dh.mjs
 │                            纯逻辑：PDO / SMBus / 温度与加速度换算
@@ -224,6 +233,9 @@ CRC-8 覆盖 `FROM..DATA`（含 varint 字节），反射多项式 `0x8C`、初�
 | `selectBus` | BUS_SELECT `0x0221` | 切换 I2C1/I2C2… 与备用引脚方案（STM32 固定复用） |
 | `startStream` / `stopStream` | STREAM_START `0x0230` / STREAM_STOP `0x0231` | LIS3DH 中断推送：固件按计划读寄存器并主动上报，停止时回累计帧数 |
 | （设备主动） | STREAM_DATA `0x0232` | 设备→主机主动帧（address/seq/length/data），上位机接收泵分发 |
+| `configureReport` / `startReport` / `stopReport` | REPORT_CONFIG `0x0240` / START `0x0241` / STOP `0x0242` | 周期自动上报（AR-1.0）：逐槽下发配置、启停任务表，停止时回各任务累计帧数 |
+| `queryReport` / `clearReport` | REPORT_STATUS `0x0243` / CLEAR `0x0244` | 读取任务表快照（maxTasks/tick/active/槽位状态）、清空全部槽位 |
+| （设备主动） | REPORT_DATA `0x0245` | 设备→主机主动帧（taskId/address/seq/length/atMs/data），与 STREAM_DATA 共用接收泵 |
 | `eepromRead` / `eepromWrite` | EEPROM_OPEN `0x0301` / READ `0x0302` / WRITE `0x0303` | 先 OPEN 读取容量 |
 
 EEPROM 型号映射沿用桌面版假设：`model = CH341 type + 1`，器件地址固定 `0x50`，
@@ -233,7 +245,7 @@ EEPROM 型号映射沿用桌面版假设：`model = CH341 type + 1`，器件地�
 
 ```powershell
 deno task check    # 类型检查
-deno task test     # 102 项：LWPKT 金帧、STREAM 编解码、协议校验、总线参数、CAPS v2 引脚表、传输层、后端、BLE/互斥/断开释放
+deno task test     # 121 项：LWPKT 金帧、STREAM / REPORT 编解码与往返、自动上报纯逻辑、协议校验、总线参数、CAPS v2 引脚表、中断引脚平台定义、传输层、后端、BLE/互斥/断开释放
                    # 另含 LIS3DH 三轴换算、输出模式三档、FIFO/中断路由、批量解码与流式分发（约 30 项）
 ```
 
@@ -274,10 +286,16 @@ deno task test     # 102 项：LWPKT 金帧、STREAM 编解码、协议校验、
 | 切换 I2C 实例超时 | 固件重建总线约 1 秒；确认 `busConfigTimeoutMs` 为 5000 ms、供电稳定 |
 | LIS3DH 三轴恒为同一组值 | 块读未置子地址 MSB（`0xA8`），或 ODR 低于读取率；用页面默认块读路径并按提示把 ODR 调到 ≥2× 读取率 |
 | 「中断推送」提示固件需实现 STREAM_START | 旧固件未实现 STREAM 命令；升级固件（见 `docs/LIS3DH_STREAM_PROTOCOL.md`）或改用轮询/FIFO 模式 |
-| 中断推送已启动但无数据 | INT1 未接到固件声明的 GPIO、上拉/共地问题，或固件未实现中断触发（应答 `flags` 未声明时页面会提示回退）；检查跳线与接线 |
+| 中断推送已启动但无数据 | INT1 未接到固件声明的引脚、上拉/共地问题，或固件未实现中断触发（应答 `flags` 未声明时页面会提示回退）；检查跳线与接线 |
+| 中断引脚下拉里没有我要的引脚 | 页面会排除当前 SDA/SCL 与保留引脚（ESP32）或 SWD（STM32）；改接线后重新连接即可刷新候选 |
+| STM32 中断引脚显示成 `PA4 · 0x04` | 这是 `port*16+pin` 编码，传给固件的 `intPin` 是 `0x04`；固件必须按同一编码解析，不能当 GPIO4 |
 | FIFO 模式提示「没有可读样本」 | 读取间隔太小（读得比攒得快）；按页面提示加大批量读取周期或提高 ODR |
 | LIS3DH 读数为 0 或全 `0xFF` | `CTRL_REG1` 的 ODR 为 0（掉电）/轴未使能，或器件未上电；在 02 区下发配置并看回读 |
 | LIS3DH 温度恒为 0 | `TEMP_CFG.TEMP_EN` 未置位；在 02 区勾选「温度通道」后下发 |
+| 「周期自动上报」提示固件不支持 | 旧固件未实现 `REPORT_*`（`0x0240–0x0245`）；升级固件（见 `docs/AUTO_REPORT_PROTOCOL.md`），页面会禁用按钮直到重连 |
+| 已启动但数据卡没有帧 | 槽位未下发配置就启动、器件无应答（I²C 失败不推帧也不递增 seq）、或周期大于预期；先「刷新任务表」看状态列与错误计数 |
+| 运行中的槽位下发配置报 ERR_ARG | 固件要求在 `CONFIGURED` 状态改配置；先「停止本槽位」再改，避免帧长中途变化 |
+| 启动上报时提示“中断推送运行中” | STREAM 与 REPORT 互斥；先去 LIS3DH 页停止「中断推送」再启动上报 |
 
 ## 已知限制
 
@@ -292,3 +310,6 @@ deno task test     # 102 项：LWPKT 金帧、STREAM 编解码、协议校验、
 - 页面刷新或关闭标签页会释放串口/蓝牙连接；操作记录仅保存在内存中。
 - LIS3DH 轮询 / FIFO 模式依赖固件往返时延：蓝牙分片下单帧更慢，实际周期可能大于设定值；ODR 需 ≥2× 读取率才有新数据。
 - LIS3DH「中断推送」依赖固件实现 STREAM 命令（`0x0230`–`0x0232`）并把 INT1 接至主控 GPIO；旧固件会自动提示降级方案。
+- LIS3DH 中断引脚按平台定义：ESP32 用固件 CAPS v2 引脚表，STM32 用 `port*16+pin` 静态端口表；旧固件/未知平台退回 0–63 数值输入。
+- 周期自动上报的页面与协议已就绪，但**数据依赖固件实现 `REPORT_*`**；当前在旧固件上只能看到“不支持”提示。
+- 上报页切到其它页面不会停止上报（固件仍在推帧）；要停必须回到本页点「停止全部」或断开连接。

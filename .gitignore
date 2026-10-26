@@ -57,3 +57,7 @@ webSerialPlotter/dist/
 *.db-wal
 *.db-shm
 **/spike/
+i2c_web_tool/Web串口I2C-操作说明.md
+i2c_web_tool/README.md
+i2c_web_tool/Web串口I2C-操作说明.md
+i2c_web_tool/Web串口I2C-程序设计说明.md

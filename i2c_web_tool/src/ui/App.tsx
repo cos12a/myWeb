@@ -8,6 +8,8 @@ import type {
   I2cBusConfig,
   I2cBusConfigPatch,
   I2cCapabilities,
+  I2cReportFrame,
+  I2cReportTask,
   I2cStreamFrame,
   I2cStreamRequest,
   Lis3dhConfig,
@@ -18,6 +20,7 @@ import type {
   TransportDevice,
   TransportKind,
 } from "../types.ts";
+import AutoReportPanel from "./AutoReportPanel.tsx";
 import BusConfigPanel from "./BusConfigPanel.tsx";
 import Ch224Panel from "./Ch224Panel.tsx";
 import Lis3dhPanel from "./Lis3dhPanel.tsx";
@@ -86,7 +89,7 @@ function initialTheme(): Theme {
 
 function App() {
   const [activePage, setActivePage] = useState<
-    "i2c" | "ch224" | "mlx" | "lis3dh"
+    "i2c" | "ch224" | "mlx" | "lis3dh" | "report"
   >("i2c");
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [status, setStatus] = useState<DeviceStatus>(EMPTY_STATUS);
@@ -642,6 +645,42 @@ function App() {
     [],
   );
 
+  /** LIS3DH 页「周期上报」模式：只接收指定槽位的 REPORT_DATA 帧。 */
+  const subscribeLis3dhReport = useCallback(
+    (
+      taskId: number,
+      listener: (sample: Lis3dhSample, frame: I2cReportFrame) => void,
+      fullScale: number,
+    ) => api.lis3dhSubscribeReport(taskId, listener, fullScale),
+    [],
+  );
+
+  // 周期自动上报：配置 / 启动失败直接抛错，由面板给出协议指引式提示。
+  const configureAutoReport = useCallback(
+    (task: I2cReportTask) => api.autoReportConfigure(task),
+    [],
+  );
+
+  const startAutoReport = useCallback(
+    (taskId?: number) => api.autoReportStart(taskId),
+    [],
+  );
+
+  const stopAutoReport = useCallback(
+    (taskId?: number) => api.autoReportStop(taskId),
+    [],
+  );
+
+  const queryAutoReport = useCallback(() => api.autoReportStatus(), []);
+
+  const clearAutoReport = useCallback(() => api.autoReportClear(), []);
+
+  const subscribeAutoReport = useCallback(
+    (listener: (frame: I2cReportFrame) => void) =>
+      api.autoReportSubscribe(listener),
+    [],
+  );
+
   // 三轴采样：走 100 ms 轮询，不写操作记录也不闪 busy。
   const pollLis3dhSample = useCallback(
     async (address: number, fullScale: number) => {
@@ -754,6 +793,8 @@ function App() {
               ? "MLX90614 红外测温"
               : activePage === "lis3dh"
               ? "LIS3DH 三轴加速度"
+              : activePage === "report"
+              ? "周期自动上报"
               : "CH224A PD 取电控制"}
             <span>.</span>
           </h1>
@@ -764,6 +805,8 @@ function App() {
               ? "读取物体与环境温度、手动读写 16 位寄存器，支持自动轮询与曲线。"
               : activePage === "lis3dh"
               ? "轮询 / FIFO 批量 / 中断推送三种读取模式，立体显示姿态，可配置输出模式与 ODR。"
+              : activePage === "report"
+              ? "设备端按间隔自读寄存器并主动推帧，最多 16 个任务槽位并行；主机只收数据，不轮询。"
               : "读取电源能力、核验支持档位，再安全请求 USB-C PD 电压。"}
           </p>
         </div>
@@ -774,6 +817,8 @@ function App() {
             ? "SMBus · MLX90614"
             : activePage === "lis3dh"
             ? "I²C · LIS3DH"
+            : activePage === "report"
+            ? "REPORT · AR-1.0"
             : "I²C · CH224A"}
         </div>
       </section>
@@ -810,6 +855,14 @@ function App() {
           onClick={() => setActivePage("lis3dh")}
         >
           LIS3DH 加速度计
+        </button>
+        <button
+          type="button"
+          className={activePage === "report" ? "active" : ""}
+          aria-current={activePage === "report" ? "page" : undefined}
+          onClick={() => setActivePage("report")}
+        >
+          周期自动上报
         </button>
       </nav>
 
@@ -1388,10 +1441,12 @@ function App() {
           onReadRegister={readMlxRegister}
           onWriteRegister={writeMlxRegister}
         />
-      ) : (
+      ) : activePage === "lis3dh" ? (
         <Lis3dhPanel
           connected={status.connected}
           busy={busy}
+          capabilities={busCapabilities}
+          busConfig={busConfig}
           onGoConnect={() => setActivePage("i2c")}
           onDiscover={discoverLis3dh}
           onListRegisters={listLis3dhRegisters}
@@ -1406,6 +1461,23 @@ function App() {
           onConfigure={configureLis3dh}
           onReadRegister={readLis3dhRegister}
           onWriteRegister={writeLis3dhRegister}
+          onReportConfigure={configureAutoReport}
+          onReportStart={startAutoReport}
+          onReportStop={stopAutoReport}
+          onReportStatus={queryAutoReport}
+          onSubscribeReportSample={subscribeLis3dhReport}
+        />
+      ) : (
+        <AutoReportPanel
+          connected={status.connected}
+          busy={busy}
+          onGoConnect={() => setActivePage("i2c")}
+          onConfigure={configureAutoReport}
+          onStart={startAutoReport}
+          onStop={stopAutoReport}
+          onStatus={queryAutoReport}
+          onClear={clearAutoReport}
+          onSubscribe={subscribeAutoReport}
         />
       )}
 

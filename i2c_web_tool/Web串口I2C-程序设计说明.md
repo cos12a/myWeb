@@ -10,8 +10,8 @@
 
 - 在浏览器中完成：I²C 总线扫描、单字节寄存器读写、原始 I²C 传输、24Cxx EEPROM 读写。
 - 复用桌面版已验证的 CH224A（PD/QC 取电）与 MLX90614（红外测温）业务逻辑。
-- 新增 LIS3DH 三轴加速度页：三种读取模式（单次轮询 / FIFO 批量 / 中断推送）、g/原始值/倾角/温度、
-  CSS 3D 姿态、量程/输出模式三档/ODR 全表/FIFO/中断路由配置、37 条寄存器表与单字节读写；
+- 新增 LIS3DH 三轴加速度页：四种读取模式（单次轮询 / FIFO 批量 / 中断推送 / 周期上报）、g/原始值/倾角/温度、
+  SVG 等轴测姿态（地面网格 + 倾斜器件板 + 发光矢量）、量程/输出模式三档/ODR 全表/FIFO/中断路由配置、37 条寄存器表与单字节读写；
   业务规则仍按“纯逻辑 .mjs + 控制器 .ts + 面板”三层拆分。
 - 协议与桌面版串口后端**完全一致**：同一套 LWPKT 帧格式、命令码、CRC、分片规则。
 - 服务端零硬件依赖，可部署在任意能跑 Deno 的机器（本机或内网服务器）。
@@ -147,7 +147,7 @@ i2c_web_tool/
 │   │   └── byte_queue.ts     字节队列（read(deadline)/close 唤醒）
 │   ├── serial/
 │   │   ├── backend.ts        I2cBackend / BackendStatus / ConnectRequest
-│   │   ├── serial_lwpkt.ts   方法面 ↔ LWPKT，异步请求-应答 + STREAM 接收泵
+│   │   ├── serial_lwpkt.ts   方法面 ↔ LWPKT，异步请求-应答 + STREAM/REPORT 共用接收泵
 │   │   ├── web_serial_transport.ts  Web Serial Provider + 端口注册表
 │   │   ├── ble_nus_transport.ts     BLE NUS Provider（GATT/分片/通知）
 │   │   ├── lwpkt.mjs         帧编解码、FrameDecoder、命令 codec
@@ -155,15 +155,18 @@ i2c_web_tool/
 │   │   ├── serial.mjs        波特率表与校验
 │   │   ├── ch224.ts/.mjs     CH224A 控制器与纯逻辑
 │   │   ├── mlx90614.ts/.mjs  MLX90614 控制器与纯逻辑
+│   │   ├── int_pins.mjs      中断引脚的 ESP32/STM32 平台定义与校验
+│   │   ├── auto_report.ts/.mjs  周期自动上报控制器（归一化 / 回绕 / 丢帧）
 │   │   └── lis3dh.ts/.mjs    LIS3DH 控制器与纯逻辑
 │   └── ui/
 │       ├── App.tsx           主界面与全部交互编排
 │       ├── BusConfigPanel.tsx I²C 引脚/频率参数面板
 │       ├── Ch224Panel.tsx    CH224A 面板
 │       ├── Mlx90614Panel.tsx MLX90614 面板
-│       ├── Lis3dhPanel.tsx   LIS3DH 面板（含 CSS 3D 姿态）
+│       ├── Lis3dhPanel.tsx   LIS3DH 面板（四种读取模式 + SVG 等轴测姿态）
+│       ├── AutoReportPanel.tsx 周期自动上报面板（槽位表单 / 任务表 / 数据卡）
 │       └── styles.css        主题与布局
-├── tests/                    8 个测试文件，102 项
+├── tests/                    10 个测试文件，121 项
 └── dist/                     构建产物（git 忽略）
 ```
 
@@ -337,10 +340,11 @@ eepromWrite(type, offset, writeHex)
 **LIS3DH 三轴加速度**（`lis3dh.ts`）：
 
 1. `discover()` 扫 `0x18/0x19`，读 `0x0F WHO_AM_I`（应为 `0x33`）与 `CTRL_REG1/3/4/5`、`TEMP_CFG`、`FIFO_CTRL`，识别成功才标记 `identified`。
-2. 三种采样通道：
+2. 四种采样通道：
    - 轮询 `readSample()`：`readRegisters(address, 0xA8, 6)`；不足 6 字节时退化为 6 次 `read(address, 0x28 + i)`，`readMode` 标记实际路径；
    - FIFO 批量 `readFifoBatch()`：先读 `FIFO_SRC` 取待读组数，再一次块读 `count × 6` 字节，`decodeAccelerationBatch()` 逐组换算；
-   - 中断推送 `subscribeStream()`：订阅后端 `STREAM_DATA` 帧，用 `decodeAccelerationBatch()` 解码后逐组回调 `Lis3dhSample`（`at` 取帧到达时间）。
+   - 中断推送 `subscribeStream()`：订阅后端 `STREAM_DATA` 帧，用 `decodeAccelerationBatch()` 解码后逐组回调 `Lis3dhSample`（`at` 取帧到达时间）；
+   - 周期上报 `subscribeReport(taskId)`：订阅后端 `REPORT_DATA` 帧，只处理 `frame.taskId` 匹配的帧，同样经 `decodeAccelerationBatch()` 解码，`at` 取**设备端 `atMs`**（`I2cReportFrame.receivedAt`）。
 3. 纯逻辑 `decodeAcceleration()` / `decodeAccelerationBatch()` 拼 16 位小端、转有符号、除 `accRange` 得 g，再算 `|g|`、pitch、roll。
 4. 配置：`configure()` 按 `Lis3dhConfig` 编码六个寄存器（`CTRL_REG1/3/4/5`、`TEMP_CFG`、`FIFO_CTRL`）后写入，再回读比对 `matches`；输出模式从原始入参解析（三档互斥，兼容旧布尔字段）。
 5. 温度：`readRegisters(address, 0x8C, 2)`，`°C = int8(OUT_ADC3_H) + 25`；全 0 视为未启用。
@@ -911,17 +915,42 @@ interface ConnectRequest {
 - `startStream(request)`：发 `STREAM_START 0x0230`（计划：address/register/length/mode/periodMs/intPin/count），
   解码应答 `{ mode, periodMs, flags, intSupported }` 后置 `#streaming`，并启动接收泵；`intSupported=false` 时
   文案改为“固件回退为定时推送”。
-- 接收泵 `#runStreamPump`：循环 `#withLock(() => transport.read(10))`，解出 `STREAM_DATA` 后调
-  `#dispatchStreamFrame` 广播；`#busy`（请求-应答在途）时 `sleepMs(3)` 让位，传输异常时退避 10 ms
-  由外部断开事件收口；`#streamPumpId` 递增使旧泵自然退出（stop/重连/断开都会失效旧泵）。
-- `stopStream()`：幂等（未在推送中直接返回 0）；先清 `#streaming` 与旧泵 ID，再以 `waitBusy` 模式发
-  `STREAM_STOP 0x0231`（等待在途请求完成后再发，最长 3 s），返回固件累计帧数；`disconnect()` 会先尝试
-  `stopStream()`，失败不阻断断开流程。
+- `intPin` 先经 `int_pins.mjs` 的 `validateIntPin()` 校验（ESP32 有引脚表时按表/保留位拒绝，STM32 限
+  `port*16+pin`），提示文案用 `formatIntPin()` 按平台渲染成 `GPIO4` / `PB6`。
+- 接收泵 `#runReceivePump`：STREAM 与 REPORT 共用（条件 `#streaming || #reporting`），循环
+  `#withLock(() => transport.read(10))`，解出 `STREAM_DATA` 后调 `#dispatchStreamFrame` 广播；
+  `#busy`（请求-应答在途）时 `sleepMs(3)` 让位，传输异常时退避 10 ms
+  由外部断开事件收口；`#receivePumpId` 递增使旧泵自然退出（stop/重连/断开都会失效旧泵）。
+- `stopStream()`：幂等（未在推送中直接返回 0）；先清 `#streaming`，再以 `waitBusy` 模式发
+  `STREAM_STOP 0x0231`（等待在途请求完成后再发，最长 3 s），返回固件累计帧数；只有
+  `#reporting` 也为假时才递增 `#receivePumpId` 退泵，避免误杀仍在上报的 REPORT 泵；
+  `disconnect()` 会先尝试 `stopStream()`，失败不阻断断开流程。
 - `#clearConnection()` 一并清 `#streaming`/泵 ID/计数，避免重连后旧泵继续跑。
 - **帧读写互斥链 `#withLock`**：请求-应答与接收泵共用一把串行锁（`#lockChain`），先到先得、
   出错不断链——两者操作同一字节流，必须严格串行。
 
-### 8.12 错误分类
+### 8.12 周期自动上报（REPORT，AR-1.0）
+
+协议与上位机契约见 [docs/AUTO_REPORT_PROTOCOL.md](./docs/AUTO_REPORT_PROTOCOL.md) 与
+[docs/AUTO_REPORT_DESIGN.md](./docs/AUTO_REPORT_DESIGN.md)；后端要点：
+
+- **六个方法**：`configureReport(task)` → `REPORT_CONFIG 0x0240`（逐槽下发）；`startReport(taskId?)` →
+  `0x0241`；`stopReport(taskId?)` → `0x0242`（回各任务帧数）；`queryReport()` → `0x0243`（
+  `maxTasks/tickMs/activeCount/槽位状态`）；`clearReport()` → `0x0244`；`subscribeReport(listener)` 收
+  `REPORT_DATA 0x0245`。
+- **共用接收泵**：不新开泵、不新开锁。泵循环条件为 `#streaming || #reporting`，同一轮里按 CMD
+  分发 `STREAM_DATA` / `REPORT_DATA`；`#receivePumpId` 递增统一让旧循环退出。
+- **退泵判定**：`#reportRunning: Set<taskId>` 记录单槽启动，`#reportAllStarted` 记录 `0xFF` 启动；
+  `stopReport` 只在「停止全部」或「集合已空且未整表启动」时调用 `#stopReportPump()`，避免部分停止
+  把还在跑的槽位帧丢掉。
+- **互斥**：`startReport` 拒绝 `#streaming`，`startStream` 拒绝 `#reporting`；两边文案都指向对方页面。
+- **校验与钳制**：`validateReportTask` 检查 taskId 0–255、地址 0x08–0x77、寄存器 0–255、
+  `length 1–192`、`periodMs 1–60000`、`count 0–65535`；周期与计数上限在 `lwpkt.mjs` 编码时就钳制，
+  应答回显的是固件实际生效值。
+- **断开清理**：`disconnect()` 依次 `stopStream()` / `stopReport(0xFF)`（各自 try/catch），
+  `#clearConnection()` 清空 `#reporting/#reportRunning/#reportFrames/监听器` 并递增泵 ID。
+
+### 8.13 错误分类
 
 | 错误 | 来源 | UI 表现 |
 | --- | --- | --- |
@@ -938,6 +967,9 @@ interface ConnectRequest {
 | `Error("未找到 NUS 服务或特征…")` | 固件未启用 NUS 透传 | 提示核对三个 UUID |
 | `Error("串口/蓝牙已连接但握手失败：…")` | ECHO 失败 | 提示固件/接线/波特率 |
 | `LwpktError(status: 7)`（STREAM_START） | 旧固件不支持流式 | 提示固件需实现 STREAM，或改用轮询 / FIFO |
+| `LwpktError(status: 7)`（REPORT_*） | 旧固件不支持周期上报 | 页面置 `unavailable`：顶部提示升级固件并禁用全部按钮，重连后复位 |
+| `Error("当前固件不支持周期自动上报…")` | 后端未实现 `REPORT_*` 方法面 | 控制器统一降级文案（`AutoReportController.UNSUPPORTED`） |
+| `Error("中断推送运行中，请先停止 STREAM…")` | 启动上报时 STREAM 未停 | 去 LIS3DH 页停止「中断推送」后重试 |
 
 ## 9. 器件控制器层
 
@@ -987,8 +1019,24 @@ interface ConnectRequest {
 - **中断推送的性能路径**：接收泵在无请求时每轮 `read(10)` 取帧；样本经
   `latestSampleRef` + `requestAnimationFrame` 节流到 60 fps 才进 React 状态——高 ODR 下
   DOM 更新量恒定，页面不被数据洪峰拖垮；速率/丢帧统计都在 ref 里累积，每 500 ms 才刷一次 UI。
+- **周期上报（第四个模式）**：同一个接收泵分发 `REPORT_DATA`，`subscribeReport(taskId)` 只认本槽位的帧；
+  本页固定占一个槽位、寄存器 `0xA8` / 长度 6，周期 1–60000 ms、帧数上限 `0` 表示不限。
+  `at` 取帧内 `atMs`（设备采样时刻），所以「设备间隔」能直接反映固件是否按周期在跑。
+  与 STREAM 互斥：运行中改配会被固件拒（`ERR_ARG`），页面统一走“先 `REPORT_STOP` → `REPORT_CONFIG` → `REPORT_START`”。
 - **位域掩码归一化**：`REGISTER_FIELDS` 允许按手册“高位在前”写 `{ low: 7, high: 4 }`，
   `describeRegister()` 用 `Math.min/Math.max` 归一化后再算 mask；否则 `1 << (high - low + 1)` 会得到负位移。
+
+### 9.5 周期自动上报控制器（`auto_report.ts`）
+
+- **纯逻辑与控制器分离**：`auto_report.mjs` 只做 `normalizeReportTask`（补默认值 + 范围校验）、
+  `deviceDeltaMs`（u32 回绕）、`lostFrames`（u16 回绕，重复/乱序返回 0）、`formatReportBytes`、
+  `createReportTracker`；`auto_report.ts` 只做方法收口与降级文案，不碰器件语义。
+- **支持探测**：`supportsReport()` 判 `typeof backend.configureReport === "function"`，只能说明
+  “传输层实现了方法面”；固件是否支持要看 `REPORT_STATUS` 是否回 `ERR_UNSUPPORTED`。
+- **旧固件统一文案**：方法缺失时抛 `UNSUPPORTED`；`subscribe` 无实现时返回空退订函数，
+  面板可照常渲染并自行降级。
+- **不做器件换算**：广播的是原始 `I2cReportFrame`（`taskId/address/seq/atMs/bytes`），g 值 / ℃
+  由各器件控制器解释，避免把芯片知识塞进通用模块。
 
 ## 10. API 适配层与类型契约
 
@@ -998,6 +1046,7 @@ interface ConnectRequest {
 
 ```ts
 const backend = new SerialLwpktBackend();
+const autoReport = new AutoReportController(backend);
 const ch224 = new Ch224Controller(backend);
 const mlx = new Mlx90614Controller(backend);
 const lis3dh = new Lis3dhController(backend);
@@ -1013,7 +1062,8 @@ const lis3dh = new Lis3dhController(backend);
 | I²C | `scan`、`read`、`write`、`transfer`、`eepromRead`、`eepromWrite` |
 | CH224 | `ch224Discover`、`ch224Registers`、`ch224Capabilities`、`ch224ReadRegister`、`ch224WriteRegister`、`ch224RequestPower` |
 | MLX | `mlxDiscover`、`mlxRegisters`、`mlxReadRegister`、`mlxWriteRegister`、`mlxReadTemperature`、`mlxReadEmissivity`、`mlxWriteEmissivity` |
-| LIS3DH | `lis3dhDiscover`、`lis3dhRegisters`、`lis3dhReadSample`、`lis3dhReadTemperature`、`lis3dhConfigure`、`lis3dhReadRegister`、`lis3dhWriteRegister`、`lis3dhReadFifoStatus`、`lis3dhReadFifoBatch`、`lis3dhResetFifo`、`lis3dhFifoHint`、`lis3dhStartStream`、`lis3dhStopStream`、`lis3dhSubscribeStream` |
+| LIS3DH | `lis3dhDiscover`、`lis3dhRegisters`、`lis3dhReadSample`、`lis3dhReadTemperature`、`lis3dhConfigure`、`lis3dhReadRegister`、`lis3dhWriteRegister`、`lis3dhReadFifoStatus`、`lis3dhReadFifoBatch`、`lis3dhResetFifo`、`lis3dhFifoHint`、`lis3dhStartStream`、`lis3dhStopStream`、`lis3dhSubscribeStream`、`lis3dhSubscribeReport` |
+| 自动上报 | `autoReportSupports`、`autoReportConfigure`、`autoReportStart`、`autoReportStop`、`autoReportStatus`、`autoReportClear`、`autoReportSubscribe` |
 
 - 旧的 `serialPorts` / `requestPort` 已移除，统一为 `devices(kind)` / `requestDevice(kind)`；
 - 连接方法从 `connect(portId, baud)` 改为 `connect({ kind, deviceId, baudRate })`，连接前不再需要判断“当前是哪种后端”；
@@ -1034,26 +1084,28 @@ const lis3dh = new Lis3dhController(backend);
 - `SerialPortSummary = TransportDevice`（兼容旧命名），新增 `TransportDevice` / `TransportDescriptor` / `TransportEvent` 等 re-export，UI 不需要直接 import `src/transport/*`。
 - 删除 `BackendInfo`、`ApiResult`、`SpiTransferInput/Result`。
 - CH224/MLX 的结果类型原样保留。
-- LIS3DH 新增 `Lis3dhSample` / `Lis3dhConfig` / `Lis3dhRegisterDetail` / `Lis3dhReadMode`（poll/fifo/stream）/
+- LIS3DH 新增 `Lis3dhSample` / `Lis3dhConfig` / `Lis3dhRegisterDetail` / `Lis3dhReadMode`（poll/fifo/stream/report）/
   `Lis3dhFifoStatus` / `Lis3dhFifoBatch` / `Lis3dhFifoHint` 等契约；`FULL_SCALES` 的
   `mgPerDigit` 只用于展示，换算以 `accRange` 为准（两者关系见 9.4）。STREAM 相关传输类型
   （`I2cStreamRequest/Info/Frame`）定义在 `backend.ts`，经 `types.ts` re-export 给 UI。
+- 自动上报新增 `I2cReportTask/Config/Info/Stopped/Summary/Status/Frame`（同样定义在 `backend.ts`、
+  经 `types.ts` re-export）；`I2cBackend` 上六个 REPORT 方法均为可选实现，旧后端无需改动。
 
 ## 11. 前端 UI
 
-文件：`src/ui/App.tsx`（约 1280 行），面板复用桌面版。
+文件：`src/ui/App.tsx`（约 1510 行），面板复用桌面版。
 
 ### 11.1 页面结构
 
-- 左侧栏：品牌、设备连接面板、I²C 参数面板、扫描卡片、导航（I²C / CH224A / MLX90614 / LIS3DH）、主题切换、页脚。
-- 主区：按 `activePage` 渲染 I²C 操作台、CH224 面板、MLX 面板或 LIS3DH 面板。
+- 左侧栏：品牌、设备连接面板、I²C 参数面板、扫描卡片、导航（I²C / CH224A / MLX90614 / LIS3DH / 周期自动上报）、主题切换、页脚。
+- 主区：按 `activePage` 渲染 I²C 操作台、CH224 面板、MLX 面板、LIS3DH 面板或自动上报面板。
 - I²C 操作台：扫描卡片、寄存器读写卡片、原始传输 / EEPROM 标签页、最近操作。
 
 ### 11.2 状态模型
 
 | 状态 | 说明 |
 | --- | --- |
-| `activePage` | `"i2c" \| "ch224" \| "mlx" \| "lis3dh"` |
+| `activePage` | `"i2c" \| "ch224" \| "mlx" \| "lis3dh" \| "report"` |
 | `status` | 后端状态（连接、传输种类、设备展示名、波特率、帧统计） |
 | `transports` | `api.transports()` 的结果，渲染连接方式切换按钮 |
 | `transportKind` | 当前选中的传输；已连接时切换按钮被禁用 |
@@ -1150,19 +1202,29 @@ useEffect(() => {
 
 | 区块 | 内容 | 数据来源 |
 | --- | --- | --- |
-| 01 读取模式与实时姿态 | 三种读取模式卡片 + 模式参数行（轮询间隔 / FIFO 周期 / 触发方式与 GPIO）、X/Y/Z 卡、`\|g\|`/Pitch/Roll/温度、`VectorScene`、推送帧/丢帧/实测 Hz | `lis3dhReadSample` / `lis3dhReadFifoBatch` / `lis3dhSubscribeStream`（60 fps 渲染节流）+ 每 10 次 `lis3dhReadTemperature` |
+| 01 读取模式与实时姿态 | 四种读取模式卡片 + 模式参数行（轮询间隔 / FIFO 周期 / 触发方式 + 平台化中断引脚 / 定时周期 / 上报槽位 + 周期 + 帧数上限）、`VectorScene`（上）、X/Y/Z 卡与 `\|g\|`/Pitch/Roll/温度（下）、推送帧/丢帧/实测 Hz、上报帧/丢帧/设备间隔 | `lis3dhReadSample` / `lis3dhReadFifoBatch` / `lis3dhSubscribeStream` / `lis3dhSubscribeReport`（60 fps 渲染节流）+ 每 10 次 `lis3dhReadTemperature`；引脚定义由 `int_pins.mjs` + CAPS 生成 |
 | 02 工作模式配置 | 输出模式三档/FS/ODR/BDU/INT1 路由/FIFO（启用/模式/阈值/复位）/温度 + 轴使能 + 六寄存器回读卡 | `lis3dhConfigure`（写后回读） |
 | 03 手动寄存器 | 单字节读写结果卡 + 37 条地址表 + 写入警告 | `lis3dhReadRegister` / `lis3dhWriteRegister` / `lis3dhRegisters` |
 | 04 性能参数 | 12 条性能与用法要点（复用 `.ch224-register-map` 的 6 行限高） | 面板内 `PERFORMANCE_ROWS` 常量 |
-| 05 推荐流程 | 7 步操作顺序（含读取率与 ODR 配合、FIFO、中断推送） | 纯文案 |
+| 05 推荐流程 | 8 步操作顺序（含读取率与 ODR 配合、FIFO、中断推送、周期上报） | 纯文案 |
 
 - 纯展示文案（`PERFORMANCE_ROWS`、`KIND_LABELS`）留在面板内，**不进** `.mjs`：逻辑层只放可测试的换算与解码。
-- `VectorScene` 不旋转场景：屏幕右 = +X、屏幕上 = +Z、屏幕外 = +Y，`translate3d(x*72, -z*72, y*72)`，
-  |g| 上限 1.4 防溢出；12 个取样点 + 末端高亮。
+- `VectorScene` 是 **SVG 等轴测投影**（不再是 CSS 3D），画布 `560×340`、`scale=82`、原点 `(280,150)`、地面 `floorZ=-1.05`：
+  `projectPoint()` 用 `ISO_X=cos30°`、`ISO_Y=0.5` 把 `(x,y,z)` 投到屏幕，并乘弱透视 `1/(1+(x+y)*0.06)`；
+  静止时 +X 指向右下、+Y 指向左下、+Z 竖直向上。矢量长度按 `|g|` 钳到 1.4，末端有地面椭圆投影与落地虚线。
+  器件板用当前重力单位向量做法线（`cross3` 取平面基），因此转动模块时板与矢量一起倾斜；板 `0.72`、芯片 `0.38`、四焊盘 `±0.55`。
+  发光效果靠 `<filter id="lis3dh-glow">`（`feGaussianBlur` 3.4 + merge）叠加在 3.2 宽渐变主线下方。
 - 轮询用 `busyRef`（全局忙锁）+ `pollingRef`（本地在途）双门闩；断开或 `autoOn=false` 时清 interval。
-- 读取模式互斥由 `selectReadMode` 收口：切入 FIFO 自动启用 Stream FIFO，切入推送先写 INT1 路由
-  再订阅 + `startStream`；退出/断开/卸载统一由 teardown effect 退订并 `stopStream`，
-  用 `streamingRef` 防 effect 依赖环。
+- 读取模式互斥由 `selectReadMode`（`async`）收口：切入 FIFO 自动启用 Stream FIFO；切入推送先写 INT1 路由
+  再订阅 + `startStream`；切入上报则按需 `REPORT_CONFIG` + `REPORT_START`（本页固定占一个槽位、寄存器 `0xA8`、长度 6），
+  运行中改周期走「先 `REPORT_STOP` 再重启」。离开上报模式时 **先 `await stopReportMode()` 再切模式**，
+  避免 `STREAM_START` 因 REPORT 仍在运行被固件 `ERR_ARG` 拒绝。
+- 退出/断开/换地址/卸载统一由 teardown effect 退订并 `stopStream` / `stopReport(槽位)`，
+  用 `streamingRef`、`reportRunningRef` 防 effect 依赖环；`refreshReport()` 只在 `readMode==="report"` 时
+  恢复运行标记，避免误接管「周期自动上报」页启动的其它槽位。
+- 中断引脚定义集中在 `src/serial/int_pins.mjs`（纯逻辑）：ESP32 用 CAPS v2 `pins[]` 生成下拉，
+  STM32 按 `port*16+pin` 静态生成 A–H 端口分组；两者都排除当前 SDA/SCL，STM32 另排 SWD
+  `PA13/PA14`。面板只负责渲染，后端 `startStream()` 复用同一 `validateIntPin()` 做入参校验。
 - 高速渲染优化：`handleStreamFrame` 只做 ref 累积 + RAF 节流提交；实测 Hz（500 ms 窗口）与
   丢帧（seq 差值）随节流一起刷新，避免每条样本触发一次 React 重渲染。
 
@@ -1223,15 +1285,17 @@ useEffect(() => {
 | 测试文件 | 覆盖 |
 | --- | --- |
 | `tests/ch224.test.mjs` | CH224A 协议状态位、固定 PDO / PPS / EPR AVS 解码、能力汇总 |
-| `tests/lwpkt.test.ts` | varint、CRC、金帧、`FrameDecoder` 再同步、各命令 codec、状态码、CONFIG/CAPS/BUS_SELECT 金字节 |
+| `tests/lwpkt.test.ts` | varint、CRC、金帧、`FrameDecoder` 再同步、各命令 codec、状态码、CONFIG/CAPS/BUS_SELECT 金字节；`REPORT_*` 六命令码与 11 个 en/decode（含 5 项 AR-1.0 金帧断言） |
 | `tests/protocol.test.ts` | 地址/字节/长度/EEPROM 校验、`parseHex`、`toTransferResult` |
 | `tests/mlx90614.test.ts` | PEC、温度换算、发射率、EEPROM 写流程（纯逻辑） |
 | `tests/lis3dh.test.ts` | 0xA8 自增地址、16 位符号扩展、量程除数、六字节解码/倾角、温度换算、输出模式三档（含 LPen+HR 禁止组合与 legacy 兼容）、ODR 双速率、INT1 路由、FIFO 编码/阈值钳制/`decodeFifoSrc`/`fifoIntervalHint`、批量解码与六寄存器配置往返 |
-| `tests/serial_lwpkt.test.ts` | 后端方法面 ↔ 帧、握手、超时、范围过滤、注入点、STREAM 请求金帧/接收泵分发/停止帧数/旧固件拒绝 |
+| `tests/int_pins.test.ts` | 中断引脚平台定义：ESP32 CAPS 引脚表过滤/仅输入标注/默认 GPIO4、旧固件数值回退、STM32 `port*16+pin` 分组与 SWD/占用排除、`validateIntPin` 各平台规则 |
+| `tests/serial_lwpkt.test.ts` | 后端方法面 ↔ 帧、握手、超时、范围过滤、注入点、STREAM 请求金帧/接收泵分发/停止帧数/旧固件拒绝/引脚表校验；REPORT 配置金帧与钳制、启停/状态/清空全流程、`REPORT_DATA` 泵分发、坏槽位/旧固件/STREAM 互斥 |
+| `tests/auto_report.test.ts` | 上报纯逻辑：`normalizeReportTask` 默认值与越界、`deviceDeltaMs` u32 回绕、`lostFrames` u16 回绕/重复帧、tracker 帧数/丢帧/间隔与多任务隔离 |
 | `tests/web_serial_transport.test.ts` | 打开参数、读泵、超时、purge、close、被动断开/半开回滚 |
 | `tests/transport.test.ts` | `ByteQueue`、`TransportManager` 互斥/被动断开、BLE 分片/通知/Provider |
 
-合计 102 项，全部纯内存，无需浏览器与硬件。其中 `tests/transport.test.ts` 11 项，专测“与具体硬件 API 无关”的传输公共层（含 manager 被动断开补 close、BLE 监听器解绑）；`tests/web_serial_transport.test.ts` 7 项，覆盖读泵异常与 `port.open()` 后取流失败的回滚，因此后续加 WebUSB 时可以复用同套假对象扩展。
+合计 121 项，全部纯内存，无需浏览器与硬件。其中 `tests/transport.test.ts` 11 项，专测“与具体硬件 API 无关”的传输公共层（含 manager 被动断开补 close、BLE 监听器解绑）；`tests/web_serial_transport.test.ts` 7 项，覆盖读泵异常与 `port.open()` 后取流失败的回滚，因此后续加 WebUSB 时可以复用同套假对象扩展。
 
 ### 12.2 `FakePort`
 

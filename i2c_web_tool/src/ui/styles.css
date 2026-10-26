@@ -490,7 +490,7 @@ tr:last-child td { border-bottom: 0; }
 .lis3dh-readonly-field { display: grid; gap: 2px; align-content: center; min-height: 36px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--input); }
 .lis3dh-readonly-field b { color: var(--accent); font: 11px/1.2 "DM Mono", monospace; }
 .lis3dh-readonly-field small { color: var(--text-muted); font-size: 8px; line-height: 1.3; }
-.lis3dh-live { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; margin-top: 16px; align-items: stretch; }
+.lis3dh-live { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 16px; align-items: stretch; }
 .lis3dh-live-main { display: grid; gap: 10px; align-content: start; min-width: 0; padding: 14px 15px; border: 1px solid var(--border-soft); border-radius: 9px; background: var(--panel-raised); }
 .lis3dh-live-head { display: flex; align-items: center; justify-content: space-between; }
 .lis3dh-live-head span { color: var(--text-muted); font-size: 9px; }
@@ -510,22 +510,14 @@ tr:last-child td { border-bottom: 0; }
 .lis3dh-live-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-top: 4px; color: var(--text-muted); font-size: 9px; }
 .lis3dh-live-meta b { color: var(--text-dim); font: 10px "DM Mono", monospace; }
 .lis3dh-live-meta .text-button { margin-left: auto; }
-.lis3dh-scene { position: relative; display: grid; place-items: center; min-height: 272px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 65%), var(--panel-inset); perspective: 720px; overflow: hidden; }
-.lis3dh-world { position: relative; width: 0; height: 0; transform-style: preserve-3d; transform: rotateX(-18deg) rotateY(-26deg); }
-.lis3dh-axis { position: absolute; left: 0; top: 0; width: 184px; height: 2px; margin: -1px 0 0 -92px; border-radius: 2px; opacity: .92; background: linear-gradient(90deg, color-mix(in srgb, var(--axis-color) 12%, transparent), var(--axis-color) 50%, color-mix(in srgb, var(--axis-color) 12%, transparent)); }
-.lis3dh-axis.is-z { transform: rotateZ(-90deg); }
-.lis3dh-axis.is-y { transform: rotateY(90deg); }
-.lis3dh-axis-label { position: absolute; left: 0; top: 0; color: var(--axis-color); font: 9px/1 "DM Mono", monospace; }
-.lis3dh-axis-label.is-x, .lis3dh-axis.is-x { --axis-color: var(--accent); }
-.lis3dh-axis-label.is-y, .lis3dh-axis.is-y { --axis-color: var(--green); }
-.lis3dh-axis-label.is-z, .lis3dh-axis.is-z { --axis-color: #e5ad5c; }
-.lis3dh-axis-label.is-x { transform: translate3d(96px, -5px, 0); }
-.lis3dh-axis-label.is-y { transform: translate3d(5px, -5px, 96px); }
-.lis3dh-axis-label.is-z { transform: translate3d(5px, -102px, 0); }
-.lis3dh-origin { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
-.lis3dh-vec-dot { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 70%, transparent); transition: transform .1s linear, opacity .1s linear; }
-.lis3dh-vec-tip { position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle, #fff, var(--accent) 55%, transparent 72%); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 75%, transparent); transition: transform .1s linear; }
-.lis3dh-scene-legend { position: absolute; left: 8px; right: 8px; bottom: 7px; color: var(--text-muted); font: 8px "DM Mono", monospace; text-align: center; }
+.lis3dh-scene { position: relative; display: grid; place-items: center; padding: 8px 10px 28px; border: 1px solid var(--border); border-radius: 10px; background: radial-gradient(ellipse at 50% 42%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 68%), linear-gradient(180deg, color-mix(in srgb, var(--panel-raised) 70%, transparent), var(--panel-inset)); overflow: hidden; }
+.lis3dh-scene-svg { display: block; width: 100%; max-width: 760px; height: auto; }
+.lis3dh-scene-badge { position: absolute; top: 10px; left: 12px; display: inline-flex; align-items: baseline; gap: 4px; padding: 4px 9px; border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.lis3dh-scene-badge span { color: var(--text-muted); font: 8px "DM Mono", monospace; }
+.lis3dh-scene-badge b { color: var(--accent); font: 700 13px/1 "DM Mono", monospace; }
+.lis3dh-scene-badge em { color: var(--text-muted); font: 8px "DM Mono", monospace; font-style: normal; }
+.lis3dh-scene-flag { position: absolute; top: 12px; right: 12px; color: var(--text-muted); font: 8px "DM Mono", monospace; letter-spacing: .06em; }
+.lis3dh-scene-legend { position: absolute; left: 8px; right: 8px; bottom: 10px; color: var(--text-dim); font: 9px "DM Mono", monospace; text-align: center; letter-spacing: .02em; }
 .lis3dh-scene-legend b { color: var(--accent); }
 .lis3dh-hint { margin-top: 12px; padding: 9px 11px; border: 1px dashed color-mix(in srgb, var(--accent) 26%, var(--border)); border-radius: 7px; color: var(--text-muted); background: color-mix(in srgb, var(--accent) 4%, var(--panel)); font-size: 9px; line-height: 1.65; }
 .lis3dh-config-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 14px; align-items: end; }
@@ -536,8 +528,8 @@ tr:last-child td { border-bottom: 0; }
 .lis3dh-axes-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .lis3dh-axes-row > span { color: var(--text-muted); font-size: 9px; }
 .lis3dh-axes-row .button { margin-left: auto; }
-/* 读取模式选择器：三张卡片（单次轮询 / FIFO 批量 / 中断推送） */
-.lis3dh-readmodes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+/* 读取模式选择器：四张卡片（单次轮询 / FIFO 批量 / 中断推送 / 周期上报） */
+.lis3dh-readmodes { display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 8px; margin-top: 12px; }
 .lis3dh-readmode { display: grid; gap: 4px; padding: 9px 11px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--panel-raised); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
 .lis3dh-readmode b { color: var(--text); font-size: 10px; }
 .lis3dh-readmode span { color: var(--text-muted); font-size: 8px; line-height: 1.55; }
@@ -551,6 +543,20 @@ tr:last-child td { border-bottom: 0; }
 .lis3dh-readmode-params .mlx-field select, .lis3dh-readmode-params .mlx-field input { width: 100%; min-width: 0; }
 .lis3dh-readmode-params .mlx-field input[type=number] { height: 36px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--input); color: var(--text); font: 11px "DM Mono", monospace; }
 .lis3dh-readmode-params > p { flex: 1 1 260px; margin: 0; color: var(--text-muted); font-size: 8.5px; line-height: 1.65; }
+/* 中断引脚定义：占满整行，突出当前 INT1 → 引脚/编码 */
+.lis3dh-readmode-params > .lis3dh-pin-hint { flex: 1 1 100%; margin: 0; color: var(--text-muted); font-size: 8.5px; line-height: 1.7; }
+.lis3dh-pin-hint b { color: var(--accent); font: 10px "DM Mono", monospace; }
+/* 周期上报（REPORT_*）：周期输入、快捷档位与运行状态行 */
+.lis3dh-report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.lis3dh-report-actions .text-button { margin-left: auto; }
+.lis3dh-report-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1 1 100%; }
+.lis3dh-report-presets > span { color: var(--text-muted); font-size: 8.5px; }
+.lis3dh-period-chip { padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--text-dim); font: 8.5px "DM Mono", monospace; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.lis3dh-period-chip:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); color: var(--text); }
+.lis3dh-period-chip.active { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); color: var(--accent); }
+.lis3dh-period-chip:disabled { opacity: .5; cursor: not-allowed; }
+.lis3dh-report-warn { flex: 1 1 100%; margin: 0; padding: 7px 10px; border: 1px dashed color-mix(in srgb, var(--red) 45%, var(--border)); border-radius: 6px; color: var(--red); font-size: 8.5px; line-height: 1.6; }
+.lis3dh-report-state { flex: 1 1 100%; margin: 0; color: var(--text-muted); font-size: 8.5px; line-height: 1.7; }
 /* 输出模式三选一：三按钮横向铺满 */
 .lis3dh-outputmode { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
 .lis3dh-outputmode button { min-width: 0; padding: 0 6px; font-size: 8.5px; white-space: nowrap; }
@@ -599,6 +605,41 @@ tr:last-child td { border-bottom: 0; }
 .bus-config-subactions { display: flex; gap: 7px; margin-top: 7px; }
 .bus-config-subactions .button { flex: 1; min-height: 31px; padding: 0 8px; font-size: 10px; }
 .bus-config-note { align-items: flex-start; justify-content: flex-start; text-align: left; line-height: 1.55; }
+
+/* 周期自动上报（REPORT_*）：任务槽位表单、任务表与实时数据卡 */
+.autoreport-field input { width: 96px; height: 36px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--input); color: var(--text); font: 11px "DM Mono", monospace; }
+.autoreport-field input:focus { border-color: var(--accent); outline: none; }
+.autoreport-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; }
+.autoreport-actions .button { min-height: 31px; padding: 0 11px; font-size: 10px; }
+.autoreport-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 11px; color: var(--text-muted); font-size: 9px; }
+.autoreport-meta b { color: var(--text); font: 10px "DM Mono", monospace; }
+.autoreport-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 13px; }
+.autoreport-toolbar .button { min-height: 32px; padding: 0 12px; font-size: 10px; }
+.autoreport-table-wrap { overflow-x: auto; border: 1px solid var(--border-soft); border-radius: 7px; }
+.autoreport-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.autoreport-table th, .autoreport-table td { padding: 8px 11px; border-bottom: 1px solid var(--border-soft); text-align: left; white-space: nowrap; }
+.autoreport-table th { color: var(--text-muted); background: var(--panel-raised); font-size: 9px; font-weight: 500; }
+.autoreport-table tr:last-child td { border-bottom: 0; }
+.autoreport-table td.mono { color: var(--accent); font-family: "DM Mono", monospace; }
+.autoreport-table tbody tr.running { background: color-mix(in srgb, var(--green) 5%, transparent); }
+.autoreport-table td .text-button + .text-button { margin-left: 10px; }
+.autoreport-table .text-button:disabled { color: var(--text-muted); cursor: not-allowed; }
+.result-badge.idle { color: var(--text-muted); background: var(--panel-raised); }
+.autoreport-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.autoreport-card { display: grid; gap: 9px; padding: 13px 14px; border: 1px solid var(--border-soft); border-radius: 9px; background: var(--panel-raised); }
+.autoreport-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.autoreport-card header b { color: var(--text); font-size: 11px; }
+.autoreport-card header span { color: var(--text-muted); font: 9px "DM Mono", monospace; }
+.autoreport-card code { overflow-wrap: anywhere; color: var(--accent); font: 11px/1.6 "DM Mono", monospace; }
+.autoreport-card dl { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; }
+.autoreport-card dl > div { display: grid; gap: 2px; }
+.autoreport-card dt { color: var(--text-muted); font-size: 8px; letter-spacing: .04em; }
+.autoreport-card dd { margin: 0; color: var(--text-dim); font: 10px "DM Mono", monospace; }
+.autoreport-card dd.warn { color: var(--red); }
+.autoreport-empty { display: grid; justify-items: center; gap: 6px; padding: 26px 12px; border: 1px dashed var(--border); border-radius: 9px; color: var(--text-muted); text-align: center; }
+.autoreport-empty span { color: var(--accent); font-size: 18px; }
+.autoreport-empty p { margin: 0; color: var(--text-dim); font-size: 10px; }
+.autoreport-empty small { font-size: 9px; line-height: 1.6; }
 
 @media (max-width: 1050px) {
   .app-shell { padding: 0 28px 22px; }
@@ -674,16 +715,26 @@ tr:last-child td { border-bottom: 0; }
 
 /* LIS3DH 响应式：先收窄立体视图，再改为单列 */
 @media (max-width: 1180px) {
-  .lis3dh-live { grid-template-columns: minmax(0, 1fr) 250px; }
+  .lis3dh-live { gap: 10px; }
 }
 @media (max-width: 980px) {
-  .lis3dh-live { grid-template-columns: 1fr; }
   .lis3dh-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 540px) {
   .lis3dh-axis-cards { grid-template-columns: 1fr; }
   .lis3dh-config-grid { grid-template-columns: 1fr; }
   .lis3dh-field-list > div { grid-template-columns: 1fr; gap: 3px; }
-  .lis3dh-scene { min-height: 236px; }
+  .lis3dh-scene { padding: 6px 6px 20px; }
+  .lis3dh-scene-badge { top: 7px; left: 7px; }
+  .lis3dh-scene-flag { display: none; }
+  .lis3dh-scene-legend { font-size: 7px; }
   .lis3dh-axes-row .button { width: 100%; margin-left: 0; }
+  .lis3dh-report-actions .button { flex: 1; }
+}
+
+/* 周期自动上报：窄屏下按钮均分、数据卡单列 */
+@media (max-width: 540px) {
+  .autoreport-field input { width: 100%; }
+  .autoreport-actions .button, .autoreport-toolbar .button { flex: 1; }
+  .autoreport-cards { grid-template-columns: 1fr; }
 }

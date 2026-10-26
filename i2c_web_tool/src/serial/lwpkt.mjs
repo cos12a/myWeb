@@ -37,6 +37,14 @@ export const CMD = {
   STREAM_START: 0x0230,
   STREAM_STOP: 0x0231,
   STREAM_DATA: 0x0232,
+  // 周期自动上报（AR-1.0）：固件保存任务表，按每任务自己的周期读 I²C 并主动推 REPORT_DATA。
+  // 与 STREAM 的差别：多任务、纯定时（无外部中断）、数据帧带设备端采样时间 atMs。
+  REPORT_CONFIG: 0x0240,
+  REPORT_START: 0x0241,
+  REPORT_STOP: 0x0242,
+  REPORT_STATUS: 0x0243,
+  REPORT_CLEAR: 0x0244,
+  REPORT_DATA: 0x0245,
   EEPROM_OPEN: 0x0301,
   EEPROM_READ: 0x0302,
   EEPROM_WRITE: 0x0303,
@@ -149,6 +157,30 @@ export const CAPS_LIMITS = {
   schemes: 16,
   label: 48,
   pins: 64,
+};
+
+/** REPORT_CONFIG.flags：bit0 = 仅数据变化时上报（其余位保留，固件不支持时回 0）。 */
+export const REPORT_FLAG = {
+  ONLY_CHANGED: 0x01,
+};
+
+/** REPORT_STATUS 摘要里的任务状态。 */
+export const REPORT_STATE = {
+  FREE: 0,
+  CONFIGURED: 1,
+  RUNNING: 2,
+};
+
+export const REPORT_STATE_TEXT = {
+  [REPORT_STATE.FREE]: "未配置",
+  [REPORT_STATE.CONFIGURED]: "已配置",
+  [REPORT_STATE.RUNNING]: "运行中",
+};
+
+// 解码上限：防止异常固件用超长任务表/长度撑爆前端（与协议 §13 带宽预算一致）。
+export const REPORT_LIMITS = {
+  tasks: 16,
+  length: 192,
 };
 
 export class LwpktError extends Error {
@@ -552,6 +584,157 @@ export function decodeStreamData(data) {
   const seq = cursor.u16();
   const length = cursor.u8();
   return { address, seq, bytes: cursor.bytes(length) };
+}
+
+// —— 周期自动上报（REPORT_*，AR-1.0，设备主动上报）——
+// 协议：docs/AUTO_REPORT_PROTOCOL.md；上位机契约：docs/AUTO_REPORT_DESIGN.md。
+// 所有应答首字节由 takeStatus() 检查，非 0 直接抛 LwpktError（不返回 status 字段）。
+
+/**
+ * REPORT_CONFIG 请求（9 B）：
+ * taskId u8 | address u8 | register u8 | length u8 | periodMs u16 | count u16 | flags u8
+ * count：0=连续推送直到 STOP；flags bit0=仅变化上报。
+ */
+export function encodeReportConfig(task = {}) {
+  const { length } = task;
+  if (!Number.isInteger(length) || length < 1 || length > REPORT_LIMITS.length) {
+    throw new RangeError(`上报长度必须为 1–${REPORT_LIMITS.length} 字节。`);
+  }
+  return new WriteCursor()
+    .u8(task.taskId)
+    .u8(task.address)
+    .u8(task.register)
+    .u8(length)
+    .u16(task.periodMs)
+    .u16(task.count ?? 0)
+    .u8(task.flags ?? 0)
+    .toUint8Array();
+}
+
+/** REPORT_CONFIG 应答：taskId u8 | periodMs u16（实际生效）| flags u8（实际支持的能力位）。 */
+export function decodeReportConfigResp(data) {
+  const cursor = takeStatus(data, "REPORT_CONFIG");
+  const taskId = cursor.u8();
+  const periodMs = cursor.u16();
+  const flags = cursor.u8();
+  return { taskId, periodMs, flags, onlyChanged: (flags & REPORT_FLAG.ONLY_CHANGED) !== 0 };
+}
+
+/** REPORT_START 请求：taskId u8（0xFF = 启动全部已配置任务）。 */
+export function encodeReportStart(taskId = 0xff) {
+  return new WriteCursor().u8(taskId).toUint8Array();
+}
+
+/** REPORT_START 应答：started u8（本次新启动数）| tickMs u16（调度粒度）。 */
+export function decodeReportStartResp(data) {
+  const cursor = takeStatus(data, "REPORT_START");
+  return { started: cursor.u8(), tickMs: cursor.u16() };
+}
+
+/** REPORT_STOP 请求：taskId u8（0xFF = 停止全部运行中任务）。 */
+export function encodeReportStop(taskId = 0xff) {
+  return new WriteCursor().u8(taskId).toUint8Array();
+}
+
+/** REPORT_STOP 应答：taskCount u8 | taskCount × { taskId u8, frames u32 }。 */
+export function decodeReportStopResp(data) {
+  const cursor = takeStatus(data, "REPORT_STOP");
+  const taskCount = cursor.u8();
+  if (taskCount > REPORT_LIMITS.tasks) {
+    throw new LwpktError(
+      `停止任务数 ${taskCount} 超过上限 ${REPORT_LIMITS.tasks}。`,
+      { kind: "frame" },
+    );
+  }
+  const tasks = [];
+  for (let index = 0; index < taskCount; index++) {
+    tasks.push({ taskId: cursor.u8(), frames: cursor.u32() });
+  }
+  return { tasks };
+}
+
+/** REPORT_STATUS 查询：无载荷（只回内存快照，固件不得访问 I²C）。 */
+export function encodeReportStatus() {
+  return new Uint8Array(0);
+}
+
+/**
+ * REPORT_STATUS 应答：
+ * version u8 | maxTasks u8 | activeCount u8 | tickMs u16 | taskCount u8 |
+ * taskCount × { taskId, address, register, length, periodMs u16, state u8 }
+ * taskCount 必须等于 maxTasks（未配置槽位也返回）；多余尾部字节忽略（向前兼容）。
+ */
+export function decodeReportStatusResp(data) {
+  const cursor = takeStatus(data, "REPORT_STATUS");
+  const version = cursor.u8();
+  const maxTasks = cursor.u8();
+  const activeCount = cursor.u8();
+  const tickMs = cursor.u16();
+  const taskCount = cursor.u8();
+  if (taskCount !== maxTasks) {
+    throw new LwpktError(
+      `任务表条数 ${taskCount} 与 maxTasks ${maxTasks} 不一致。`,
+      { kind: "frame" },
+    );
+  }
+  if (taskCount > REPORT_LIMITS.tasks) {
+    throw new LwpktError(
+      `任务槽位数 ${taskCount} 超过上限 ${REPORT_LIMITS.tasks}。`,
+      { kind: "frame" },
+    );
+  }
+  const tasks = [];
+  for (let index = 0; index < taskCount; index++) {
+    const taskId = cursor.u8();
+    const address = cursor.u8();
+    const register = cursor.u8();
+    const length = cursor.u8();
+    const periodMs = cursor.u16();
+    const state = cursor.u8();
+    tasks.push({
+      taskId,
+      address,
+      register,
+      length,
+      periodMs,
+      state,
+      stateText: REPORT_STATE_TEXT[state] ?? `未知状态 ${state}`,
+    });
+  }
+  return { version, maxTasks, activeCount, tickMs, tasks };
+}
+
+/** REPORT_CLEAR：停止全部并清空任务表，请求无载荷。 */
+export function encodeReportClear() {
+  return new Uint8Array(0);
+}
+
+/** REPORT_CLEAR 应答：cleared u8（被清空的已配置槽位数）。 */
+export function decodeReportClearResp(data) {
+  const cursor = takeStatus(data, "REPORT_CLEAR");
+  return { cleared: cursor.u8() };
+}
+
+/**
+ * REPORT_DATA（设备→主机主动帧）：
+ * taskId u8 | address u8 | seq u16 | length u8 | atMs u32 | data[length]
+ * seq 只对成功推送的帧递增；atMs 取读取成功那一刻的设备毫秒时基。
+ */
+export function decodeReportData(data) {
+  const cursor = new ReadCursor(data);
+  const taskId = cursor.u8();
+  const address = cursor.u8();
+  const seq = cursor.u16();
+  const length = cursor.u8();
+  if (length > REPORT_LIMITS.length) {
+    throw new LwpktError(
+      `上报长度 ${length} 超过上限 ${REPORT_LIMITS.length}。`,
+      { kind: "frame" },
+    );
+  }
+  const atMs = cursor.u32();
+  // 尾部多余字节视为未来扩展，按 length 截断。
+  return { taskId, address, seq, length, atMs, bytes: cursor.bytes(length) };
 }
 
 export function encodeEepromOpen(address, model) {

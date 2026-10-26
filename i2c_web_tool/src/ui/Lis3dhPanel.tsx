@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  I2cBusConfig,
+  I2cCapabilities,
+  I2cReportConfig,
+  I2cReportFrame,
+  I2cReportInfo,
+  I2cReportStatus,
+  I2cReportStopped,
+  I2cReportSummary,
+  I2cReportTask,
   I2cStreamFrame,
   I2cStreamInfo,
   I2cStreamRequest,
@@ -17,10 +26,45 @@ import type {
   Lis3dhSample,
   Lis3dhTemperature,
 } from "../types.ts";
+import {
+  buildIntPinChoices,
+  formatIntPin,
+  formatIntPinCode,
+} from "../serial/int_pins.mjs";
+import { createReportTracker } from "../serial/auto_report.mjs";
+
+interface IntPinOption {
+  value: number;
+  label: string;
+  note: string;
+}
+
+/** auto_report.mjs 的 tracker 只暴露部分字段，按 UI 需要收口。 */
+interface ReportTracker {
+  observe(frame: I2cReportFrame): {
+    frames: number;
+    lost: number;
+    intervalMs: number;
+  };
+  reset(): void;
+}
+
+/** 中断引脚候选：ESP32 来自 CAPS 自由引脚表，STM32 按 port*16+pin 静态生成。 */
+interface IntPinChoices {
+  mode: "select" | "number";
+  options: IntPinOption[];
+  groups: Array<{ label: string; options: IntPinOption[] }>;
+  preferred: number;
+  hint: string;
+}
 
 interface Lis3dhPanelProps {
   connected: boolean;
   busy: boolean;
+  /** 固件能力：决定中断引脚是自由 GPIO（ESP32）还是固定端口编码（STM32）。 */
+  capabilities: I2cCapabilities | null;
+  /** 当前 I²C 引脚：中断引脚候选要排除已占用的 SDA/SCL。 */
+  busConfig: I2cBusConfig | null;
   /** 跳到「I²C 操作台」建立连接：器件页不再自带串口 / 蓝牙连接按钮 */
   onGoConnect: () => void;
   onDiscover: () => Promise<Lis3dhDiscoverResult | undefined>;
@@ -55,6 +99,16 @@ interface Lis3dhPanelProps {
     listener: (sample: Lis3dhSample, frame: I2cStreamFrame) => void,
     fullScale: number,
   ) => () => void;
+  /** 周期上报（REPORT_*）：本页只用「一个槽位 + 固定 0xA8 / 6 字节」。 */
+  onReportConfigure: (task: I2cReportTask) => Promise<I2cReportConfig>;
+  onReportStart: (taskId?: number) => Promise<I2cReportInfo>;
+  onReportStop: (taskId?: number) => Promise<I2cReportStopped[]>;
+  onReportStatus: () => Promise<I2cReportStatus>;
+  onSubscribeReportSample: (
+    taskId: number,
+    listener: (sample: Lis3dhSample, frame: I2cReportFrame) => void,
+    fullScale: number,
+  ) => () => void;
   onConfigure: (
     address: number,
     config: Lis3dhConfig,
@@ -78,6 +132,13 @@ const POLL_INTERVAL_OPTIONS = [20, 50, 100, 200, 500, 1000];
 const FIFO_INTERVAL_OPTIONS = [50, 100, 200, 500, 1000];
 /** 渲染节流：数据再快也只按显示帧率更新 React 状态。 */
 const RENDER_THROTTLE_FPS = 60;
+/** 周期上报：三轴固定从 0x28 自增块（0xA8）起读 6 字节。 */
+const REPORT_REGISTER = 0xa8;
+const REPORT_LENGTH = 6;
+const REPORT_PERIOD_MIN_MS = 1;
+const REPORT_PERIOD_MAX_MS = 60_000;
+const REPORT_PERIOD_PRESETS = [20, 50, 100, 200, 500, 1000];
+const REPORT_SLOT_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
 
 const ADDRESS_OPTIONS = [
   { value: 0x18, label: "0x18 · SA0/SDO = 0（默认）" },
@@ -140,6 +201,7 @@ const READ_MODE_OPTIONS: Array<{
   { id: "poll", label: "单次轮询", note: "每次发读命令（1 次事务）；最简单，速率受往返时间限制" },
   { id: "fifo", label: "FIFO 批量", note: "芯片缓存 32 组，一次事务拿多组；降低总线压力，不丢样本" },
   { id: "stream", label: "中断推送", note: "固件读好后主动上报；页面零轮询，需固件支持 STREAM_* 命令" },
+  { id: "report", label: "周期上报", note: "按设定周期自读 0xA8 六字节并上报；可跨页持续，需固件支持 REPORT_*" },
 ];
 
 const DEFAULT_CONFIG: Lis3dhConfig = {
@@ -238,6 +300,8 @@ function intRouteLabel(id: string): string {
 function Lis3dhPanel({
   connected,
   busy,
+  capabilities,
+  busConfig,
   onGoConnect,
   onDiscover,
   onListRegisters,
@@ -249,6 +313,11 @@ function Lis3dhPanel({
   onStartStream,
   onStopStream,
   onSubscribeStream,
+  onReportConfigure,
+  onReportStart,
+  onReportStop,
+  onReportStatus,
+  onSubscribeReportSample,
   onConfigure,
   onReadRegister,
   onWriteRegister,
@@ -279,6 +348,39 @@ function Lis3dhPanel({
   const [streamIntPin, setStreamIntPin] = useState(4);
   const [streamLost, setStreamLost] = useState(0);
   const [streamFrames, setStreamFrames] = useState(0);
+  /** 周期上报（REPORT_*）：本页只占用一个槽位，周期/上限可随时改。 */
+  const [reportTaskId, setReportTaskId] = useState(0);
+  const [reportPeriodMs, setReportPeriodMs] = useState(100);
+  const [reportCount, setReportCount] = useState(0);
+  const [reportRunning, setReportRunning] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportUnavailable, setReportUnavailable] = useState(false);
+  const [reportSummary, setReportSummary] = useState<I2cReportSummary | null>(
+    null,
+  );
+  const [reportInfo, setReportInfo] = useState("");
+  const [reportFrames, setReportFrames] = useState(0);
+  const [reportLost, setReportLost] = useState(0);
+  const [reportInterval, setReportInterval] = useState(0);
+
+  const intPinMachine = capabilities?.machine ?? "unknown";
+  const intPinChoices = useMemo(() => {
+    return buildIntPinChoices({
+      machine: intPinMachine,
+      pins: capabilities?.pins ?? [],
+      sda: busConfig?.sda ?? null,
+      scl: busConfig?.scl ?? null,
+    }) as unknown as IntPinChoices;
+  }, [intPinMachine, capabilities, busConfig]);
+
+  // 能力表到达或换芯片后，把选中引脚收敛到仍合法的候选（ESP32 优先 GPIO4）。
+  useEffect(() => {
+    if (intPinChoices.mode !== "select") return;
+    const values = intPinChoices.options.map((item) => item.value);
+    setStreamIntPin((current) =>
+      values.includes(current) ? current : intPinChoices.preferred
+    );
+  }, [intPinChoices]);
 
   const [registerAddress, setRegisterAddress] = useState("0F");
   const [registerWriteValue, setRegisterWriteValue] = useState("00");
@@ -310,6 +412,18 @@ function Lis3dhPanel({
   /** 卸载/清理时调用的停止推送 handler（始终指向最新 props）。 */
   const stopStreamRef = useRef(onStopStream);
   stopStreamRef.current = onStopStream;
+  /** 周期上报：运行标记与停止 handler 用 ref，避免依赖环。 */
+  const reportRunningRef = useRef(false);
+  const reportTaskIdRef = useRef(reportTaskId);
+  reportTaskIdRef.current = reportTaskId;
+  const stopReportRef = useRef(onReportStop);
+  stopReportRef.current = onReportStop;
+  const reportTrackerRef = useRef<ReportTracker | null>(null);
+  if (!reportTrackerRef.current) {
+    reportTrackerRef.current = createReportTracker() as unknown as ReportTracker;
+  }
+  const readModeRef = useRef(readMode);
+  readModeRef.current = readMode;
 
   useEffect(() => {
     if (registerLoadedRef.current) return;
@@ -355,7 +469,160 @@ function Lis3dhPanel({
       streamingRef.current = false;
       void stopStreamRef.current().catch(() => {});
     }
+    if (reportRunningRef.current) {
+      reportRunningRef.current = false;
+      void stopReportRef.current(reportTaskIdRef.current).catch(() => {});
+    }
   }, []);
+
+  /** 周期上报帧：控制器已解码成样本，这里只做渲染节流与帧数/丢帧/设备间隔统计。 */
+  const handleReportFrame = useCallback(
+    (next: Lis3dhSample, frame: I2cReportFrame) => {
+      publishSample(next);
+      rateRef.current.count += 1;
+      setSampleCount((count) => count + 1);
+      const stats = reportTrackerRef.current?.observe(frame);
+      if (!stats) return;
+      setReportFrames(stats.frames);
+      setReportLost(stats.lost);
+      setReportInterval(stats.intervalMs);
+    },
+    [publishSample],
+  );
+
+  /** 固件不支持 REPORT_*：只认协议错误码或明确的「不支持」字样。 */
+  const isReportUnsupported = (message: string) =>
+    message.includes("ERR_UNSUPPORTED") || message.includes("不支持");
+
+  /** 拉固件任务表：顺带判断本页槽位是否已在运行（重进页面时恢复显示）。 */
+  const refreshReport = useCallback(async (silent = false) => {
+    try {
+      const status = await onReportStatus();
+      const summary = status.tasks.find((item) => item.taskId === reportTaskId) ??
+        null;
+      setReportSummary(summary);
+      setReportUnavailable(false);
+      const matches = Boolean(
+        summary && summary.state === 2 &&
+          summary.address === address &&
+          summary.register === REPORT_REGISTER &&
+          summary.length === REPORT_LENGTH,
+      );
+      // 只在报告模式下恢复运行标记，避免别的页面启动的任务被本页误接管。
+      if (matches && readModeRef.current === "report") {
+        reportRunningRef.current = true;
+        setReportRunning(true);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isReportUnsupported(message)) {
+        setReportUnavailable(true);
+        setReportInfo(
+          "当前固件不支持周期自动上报（需 REPORT_* 0x0240–0x0245），请升级固件后重连。",
+        );
+      } else if (!silent) {
+        setReportInfo(`任务表读取失败：${message}`);
+      }
+    }
+  }, [onReportStatus, reportTaskId, address]);
+
+  /** 下发配置并启动本槽位；运行中再次点击会先停再配（用于应用新周期）。 */
+  const startReportMode = useCallback(async () => {
+    if (!connected) {
+      setReadMode("report");
+      setNotice(
+        "已切换到周期上报模式（未连接）：连接设备后设好周期并点「下发并启动」即可。",
+      );
+      return;
+    }
+    setReportBusy(true);
+    try {
+      if (reportRunningRef.current) {
+        await onReportStop(reportTaskId);
+        reportRunningRef.current = false;
+        setReportRunning(false);
+      }
+      const config = await onReportConfigure({
+        taskId: reportTaskId,
+        address,
+        register: REPORT_REGISTER,
+        length: REPORT_LENGTH,
+        periodMs: reportPeriodMs,
+        count: reportCount,
+        flags: 0,
+      });
+      const info = await onReportStart(reportTaskId);
+      reportRunningRef.current = true;
+      setReportRunning(true);
+      setReportUnavailable(false);
+      reportTrackerRef.current?.reset();
+      setReportFrames(0);
+      setReportLost(0);
+      setReportInterval(0);
+      rateRef.current = { count: 0, since: performance.now() };
+      setReadMode("report");
+      setReportInfo(
+        `槽位 ${config.taskId} 运行中 · 实际周期 ${config.periodMs} ms · 调度 tick ${info.tickMs} ms · 本次新启动 ${info.started} 个任务`,
+      );
+      setNotice(
+        `周期上报已启动：固件每 ${config.periodMs} ms 读 0xA8 / 6 字节并主动推帧。`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const unsupported = isReportUnsupported(message);
+      if (unsupported) setReportUnavailable(true);
+      setReportInfo(`启动失败：${message}`);
+      setNotice(
+        `周期上报启动失败：${message}${
+          unsupported
+            ? "。固件需实现 REPORT_*（0x0240–0x0245），协议见 docs/AUTO_REPORT_PROTOCOL.md。"
+            : ""
+        }`,
+      );
+    } finally {
+      setReportBusy(false);
+      void refreshReport(true);
+    }
+  }, [
+    address,
+    connected,
+    onReportConfigure,
+    onReportStart,
+    onReportStop,
+    refreshReport,
+    reportCount,
+    reportPeriodMs,
+    reportTaskId,
+  ]);
+
+  /** 停止本槽位上报，并给出固件侧与页面侧的帧数对照。 */
+  const stopReportMode = useCallback(async () => {
+    if (!reportRunningRef.current) {
+      setReportInfo("当前槽位没有运行中的上报任务。");
+      return;
+    }
+    setReportBusy(true);
+    try {
+      const stopped = await onReportStop(reportTaskId);
+      const mine = stopped.find((item) => item.taskId === reportTaskId);
+      reportRunningRef.current = false;
+      setReportRunning(false);
+      setReportInfo(
+        `槽位 ${reportTaskId} 已停止 · 固件累计 ${mine?.frames ?? 0} 帧`,
+      );
+      setNotice(
+        `周期上报已停止：本页收到 ${reportFrames} 帧${
+          reportLost > 0 ? `，丢 ${reportLost} 帧` : ""
+        }。`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setReportInfo(`停止失败：${message}`);
+    } finally {
+      setReportBusy(false);
+      void refreshReport(true);
+    }
+  }, [onReportStop, refreshReport, reportFrames, reportLost, reportTaskId]);
 
   // 实测速率窗口：每 500 ms 结算一次，不参与渲染节流。
   useEffect(() => {
@@ -496,6 +763,49 @@ function Lis3dhPanel({
     setRateHz(0);
     rateRef.current = { count: 0, since: performance.now() };
     tickRef.current = 0;
+  }, [address]);
+
+  // 连接建立后拉一次固件任务表；断开则清运行标记（任务随固件重启消失）。
+  useEffect(() => {
+    if (!connected) {
+      reportRunningRef.current = false;
+      setReportRunning(false);
+      setReportSummary(null);
+      return;
+    }
+    void refreshReport(true);
+  }, [connected, refreshReport]);
+
+  // 周期上报运行中才订阅（只收本槽位的帧）；换槽位/重量程/重连都会重建。
+  useEffect(() => {
+    if (!connected || readMode !== "report" || !reportRunning) return;
+    return onSubscribeReportSample(reportTaskId, handleReportFrame, fullScale);
+  }, [
+    connected,
+    readMode,
+    reportRunning,
+    reportTaskId,
+    fullScale,
+    onSubscribeReportSample,
+    handleReportFrame,
+  ]);
+
+  // 离开周期上报模式：停掉本页槽位，避免后台持续推帧（与中断推送同一收尾策略）。
+  useEffect(() => {
+    if (readMode === "report" || !reportRunningRef.current) return;
+    reportRunningRef.current = false;
+    setReportRunning(false);
+    void stopReportRef.current(reportTaskIdRef.current)
+      .then(() => refreshReport(true))
+      .catch(() => {});
+  }, [readMode, refreshReport]);
+
+  // 地址切换：槽位仍指向旧器件，先停掉再让用户重新启动。
+  useEffect(() => {
+    if (!reportRunningRef.current) return;
+    reportRunningRef.current = false;
+    setReportRunning(false);
+    void stopReportRef.current(reportTaskIdRef.current).catch(() => {});
   }, [address]);
 
   const discover = async () => {
@@ -670,7 +980,16 @@ function Lis3dhPanel({
 
   /** 读取模式选择器入口：按目标模式准备芯片，再由效应统一收口。
    *  重复点击同一卡片不短路：连接后再次点击可重试启动（未连接时用于切换参数展示）。 */
-  const selectReadMode = (mode: Lis3dhReadMode) => {
+  const selectReadMode = async (mode: Lis3dhReadMode) => {
+    if (mode === "report") {
+      if (mode !== readMode) setReadMode(mode);
+      void startReportMode();
+      return;
+    }
+    // 离开周期上报先等固件停完，否则 STREAM_START 会因互斥被拒绝。
+    if (readMode === "report" && reportRunningRef.current) {
+      await stopReportMode();
+    }
     if (mode !== readMode) setReadMode(mode);
     if (mode === "stream") {
       void startStreamMode();
@@ -724,6 +1043,8 @@ function Lis3dhPanel({
     : "—";
   const liveActive = readMode === "stream"
     ? streamInfo !== null
+    : readMode === "report"
+    ? reportRunning
     : autoOn && connected;
   const rateLabel = rateHz >= 10 ? rateHz.toFixed(1) : rateHz.toFixed(2);
 
@@ -749,8 +1070,8 @@ function Lis3dhPanel({
           <div>
             <h3>三轴实时读取与立体姿态</h3>
             <p>
-              三种读取模式（轮询 / FIFO 批量 / 中断推送）读取 OUT_X/Y/Z（0x28–0x2D）并换算 g 值与姿态角；
-              右侧立体视图把三轴向量画在 X/Y/Z 坐标系里。
+              四种读取模式（轮询 / FIFO 批量 / 中断推送 / 周期上报）读取 OUT_X/Y/Z（0x28–0x2D）并换算 g 值与姿态角；
+              上方立体视图把三轴矢量与随重力倾斜的器件板画在 X/Y/Z 坐标系里，下方是三轴数值卡。
             </p>
           </div>
         </div>
@@ -819,7 +1140,7 @@ function Lis3dhPanel({
               aria-checked={readMode === item.id}
               className={`lis3dh-readmode ${readMode === item.id ? "active" : ""}`}
               disabled={busy}
-              onClick={() => selectReadMode(item.id)}
+              onClick={() => void selectReadMode(item.id)}
             >
               <b>{item.label}</b>
               <span>{item.note}</span>
@@ -897,46 +1218,192 @@ function Lis3dhPanel({
                   </button>
                 </div>
               </div>
-              <div className="mlx-field">
-                <label htmlFor="lis3dh-stream-pin">INT1 接入 GPIO</label>
-                <input
-                  id="lis3dh-stream-pin"
-                  type="number"
-                  min={0}
-                  max={48}
-                  value={streamIntPin}
-                  onChange={(event) =>
-                    setStreamIntPin(Number(event.target.value))}
-                />
-              </div>
-              <div className="mlx-field">
-                <label htmlFor="lis3dh-stream-period">定时周期 ms</label>
-                <input
-                  id="lis3dh-stream-period"
-                  type="number"
-                  min={0}
-                  value={streamPeriodMs}
-                  onChange={(event) =>
-                    setStreamPeriodMs(Number(event.target.value))}
-                />
-              </div>
+              {streamMode === "int" && (
+                <div className="mlx-field">
+                  <label htmlFor="lis3dh-stream-pin">INT1 接入引脚</label>
+                  {intPinChoices.mode === "select" ? (
+                    <select
+                      id="lis3dh-stream-pin"
+                      value={streamIntPin}
+                      onChange={(event) =>
+                        setStreamIntPin(Number(event.target.value))}
+                    >
+                      {intPinChoices.groups.flatMap((group) =>
+                        group.label
+                          ? [
+                            <optgroup key={group.label} label={group.label}>
+                              {group.options.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </optgroup>,
+                          ]
+                          : group.options.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))
+                      )}
+                    </select>
+                  ) : (
+                    <input
+                      id="lis3dh-stream-pin"
+                      type="number"
+                      min={0}
+                      max={63}
+                      value={streamIntPin}
+                      onChange={(event) =>
+                        setStreamIntPin(Number(event.target.value))}
+                    />
+                  )}
+                </div>
+              )}
+              {streamMode === "poll" && (
+                <div className="mlx-field">
+                  <label htmlFor="lis3dh-stream-period">定时周期 ms</label>
+                  <input
+                    id="lis3dh-stream-period"
+                    type="number"
+                    min={0}
+                    value={streamPeriodMs}
+                    onChange={(event) =>
+                      setStreamPeriodMs(Number(event.target.value))}
+                  />
+                </div>
+              )}
+              {streamMode === "int" && (
+                <p className="lis3dh-pin-hint">
+                  {intPinChoices.hint} 当前定义：<b>INT1 →{" "}
+                    {formatIntPin(streamIntPin, intPinMachine)}</b>
+                  {`（编码 ${formatIntPinCode(streamIntPin)}）`}
+                  。INT1 必须是上升沿脉冲输入，固件只消费触发、不代替页面改
+                  `CTRL_REG3`。
+                </p>
+              )}
               <p>
                 {streamInfo
                   ? `${streamInfo.message} 本次已推 ${streamFrames} 帧${
                     streamLost > 0 ? `，丢 ${streamLost} 帧` : ""
                   }。`
-                  : "页面不再下发读命令：固件在 INT1 中断（或定时）时读 0xA8 六字节并主动上报；需固件支持 STREAM_* 命令，接线与协议见 docs/LIS3DH_STREAM_PROTOCOL.md。"}
+                  : streamMode === "poll"
+                  ? "固件按定时周期读 0xA8 六字节并主动上报；需固件支持 STREAM_* 命令，协议见 docs/LIS3DH_STREAM_PROTOCOL.md。"
+                  : "页面不再下发读命令：固件在 INT1 中断时读 0xA8 六字节并主动上报；需固件支持 STREAM_* 命令，接线与协议见 docs/LIS3DH_STREAM_PROTOCOL.md。"}
+              </p>
+            </>
+          )}
+          {readMode === "report" && (
+            <>
+              <div className="mlx-field">
+                <label htmlFor="lis3dh-report-slot">上报槽位</label>
+                <select
+                  id="lis3dh-report-slot"
+                  value={reportTaskId}
+                  disabled={reportRunning || reportBusy}
+                  onChange={(event) =>
+                    setReportTaskId(Number(event.target.value))}
+                >
+                  {REPORT_SLOT_OPTIONS.map((slot) => (
+                    <option key={slot} value={slot}>槽位 {slot}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mlx-field">
+                <label htmlFor="lis3dh-report-period">上报周期 ms</label>
+                <input
+                  id="lis3dh-report-period"
+                  type="number"
+                  min={REPORT_PERIOD_MIN_MS}
+                  max={REPORT_PERIOD_MAX_MS}
+                  value={reportPeriodMs}
+                  onChange={(event) =>
+                    setReportPeriodMs(Number(event.target.value))}
+                />
+              </div>
+              <div className="mlx-field">
+                <label htmlFor="lis3dh-report-count">帧数上限</label>
+                <input
+                  id="lis3dh-report-count"
+                  type="number"
+                  min={0}
+                  max={0xffff}
+                  value={reportCount}
+                  onChange={(event) =>
+                    setReportCount(Number(event.target.value))}
+                />
+              </div>
+              <div className="lis3dh-report-actions">
+                <button
+                  className="button primary"
+                  disabled={!connected || busy || reportBusy || reportUnavailable}
+                  onClick={() => void startReportMode()}
+                >
+                  {reportRunning ? "应用新周期并重启" : "下发并启动"}
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={reportBusy || !reportRunning}
+                  onClick={() => void stopReportMode()}
+                >
+                  停止上报
+                </button>
+                <button
+                  className="text-button"
+                  disabled={!connected || reportBusy}
+                  onClick={() => void refreshReport()}
+                >
+                  刷新任务表
+                </button>
+              </div>
+              <div className="lis3dh-report-presets">
+                <span>常用周期</span>
+                {REPORT_PERIOD_PRESETS.map((ms) => (
+                  <button
+                    key={ms}
+                    type="button"
+                    className={`lis3dh-period-chip ${
+                      reportPeriodMs === ms ? "active" : ""
+                    }`}
+                    disabled={reportBusy}
+                    onClick={() => setReportPeriodMs(ms)}
+                  >
+                    {ms} ms
+                  </button>
+                ))}
+              </div>
+              {reportUnavailable && (
+                <p className="lis3dh-report-warn">
+                  当前固件不支持 REPORT_*（0x0240–0x0245）：按钮已禁用，升级固件后重连即可。
+                </p>
+              )}
+              <p className="lis3dh-report-state">
+                {reportInfo ||
+                  `槽位 ${reportTaskId} 固定读 0xA8 / 6 字节（地址取上方「器件地址」、量程取 02 区）；设好周期后点「下发并启动」。「帧数上限 0」表示一直推到停止。`}
+                {reportSummary
+                  ? ` 固件任务表：${reportSummary.stateText}${
+                    reportSummary.periodMs > 0
+                      ? ` · ${reportSummary.periodMs} ms`
+                      : ""
+                  }。`
+                  : ""}
               </p>
             </>
           )}
         </div>
 
         <div className="lis3dh-live">
+          <VectorScene g={g} magnitude={magnitude} active={Boolean(sample)} />
           <div className="lis3dh-live-main">
             <div className="lis3dh-live-head">
               <span>三轴读数 · {readModeLabel(readMode)}</span>
               <b className={liveActive ? "good" : ""}>
-                {liveActive ? (readMode === "stream" ? "推送中" : "采集中") : "已暂停"}
+                {liveActive
+                  ? readMode === "stream"
+                    ? "推送中"
+                    : readMode === "report"
+                    ? "上报中"
+                    : "采集中"
+                  : "已暂停"}
                 {liveActive && rateHz > 0 ? ` · 实测 ${rateLabel} Hz` : ""}
               </b>
             </div>
@@ -992,6 +1459,13 @@ function Lis3dhPanel({
                   {fifoBatch?.status.overrun ? " · 曾溢出" : ""}
                 </span>
               )}
+              {readMode === "report" && (
+                <span>
+                  上报 <b>{reportFrames}</b> 帧
+                  {reportLost > 0 ? ` · 丢 ${reportLost}` : ""}
+                  {reportInterval > 0 ? ` · 设备间隔 ${reportInterval} ms` : ""}
+                </span>
+              )}
               <button
                 className="text-button"
                 type="button"
@@ -1002,8 +1476,6 @@ function Lis3dhPanel({
               </button>
             </div>
           </div>
-
-          <VectorScene g={g} magnitude={magnitude} active={Boolean(sample)} />
         </div>
 
         {found && (
@@ -1025,6 +1497,7 @@ function Lis3dhPanel({
           轮询模式：读取率高于 ODR 时读数会重复，建议 ODR ≥ 2× 读取率。
           FIFO 模式：芯片缓存 32 组样本，一次事务取回，显著降低读写频率。
           中断推送模式：固件在数据就绪后主动上报，页面只处理数据、不再下发读命令。
+          周期上报模式：固件按设定周期自读并上报（REPORT_*），可设周期与帧数上限；与中断推送互斥，切走本模式会停掉本页槽位。
           {sample ? `（本次方式：${sample.readMode === "block" ? "块读" : "逐寄存器回退"}）` : ""}
         </div>
       </section>
@@ -1502,7 +1975,64 @@ function Lis3dhPanel({
   );
 }
 
-/** 立体矢量视图：屏幕右 = +X，屏幕上 = +Z，屏幕外 = +Y。 */
+/** 等轴测投影参数：+X 右下、+Y 左下、+Z 向上；远端略缩小形成透视。 */
+const SCENE = {
+  width: 560,
+  height: 340,
+  scale: 82,
+  originX: 280,
+  originY: 150,
+  floorZ: -1.05,
+  extent: 1.2,
+  shrink: 0.06,
+};
+const ISO_X = Math.cos(Math.PI / 6);
+const ISO_Y = 0.5;
+/** 坐标轴：颜色与卡片/标签保持一致（X 蓝、Y 绿、Z 琥珀）。 */
+const SCENE_AXES = [
+  { key: "x", label: "+X", color: "var(--accent)", dir: [1, 0, 0] as const },
+  { key: "y", label: "+Y", color: "var(--green)", dir: [0, 1, 0] as const },
+  { key: "z", label: "+Z", color: "#e5ad5c", dir: [0, 0, 1] as const },
+];
+
+function projectPoint(x: number, y: number, z: number) {
+  const shrink = 1 / (1 + (x + y) * SCENE.shrink);
+  return {
+    x: SCENE.originX + (x - y) * ISO_X * SCENE.scale * shrink,
+    y: SCENE.originY + ((x + y) * ISO_Y - z) * SCENE.scale * shrink,
+  };
+}
+
+function clampAxis(value: number): number {
+  return Math.max(-1.45, Math.min(1.45, value));
+}
+
+/** 两个 3D 向量的叉积（用于构造器件板的平面基）。 */
+function cross3(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+) {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ] as const;
+}
+
+function normalize3(v: readonly [number, number, number]) {
+  const length = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / length, v[1] / length, v[2] / length] as const;
+}
+
+function polygonPoints(points: Array<{ x: number; y: number }>): string {
+  return points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+    .join(" ");
+}
+
+/**
+ * 立体矢量视图：SVG 等轴测，画出地面网格、三轴箭头、随重力方向倾斜的器件板，
+ * 以及从原点指向当前加速度的有发光矢量与落地投影。
+ */
 function VectorScene({
   g,
   magnitude,
@@ -1512,52 +2042,290 @@ function VectorScene({
   magnitude: number;
   active: boolean;
 }) {
-  const scale = 72;
-  const clamp = 1.4;
-  const clampAxis = (value: number) =>
-    Math.max(-clamp, Math.min(clamp, value));
   const x = clampAxis(g.x);
   const y = clampAxis(g.y);
   const z = clampAxis(g.z);
-  const dots = 12;
+  const length = Math.hypot(x, y, z);
   const magnitudeLabel = active ? magnitude.toFixed(3) : "—";
+  const origin = projectPoint(0, 0, 0);
+  const tip = projectPoint(x, y, z);
+  const floorPoint = projectPoint(x, y, SCENE.floorZ);
+
+  // 器件板平面：法线跟随重力方向，水平放置时板面平行于 X-Y 平面。
+  const normal = length > 1e-6
+    ? normalize3([x, y, z])
+    : ([0, 0, 1] as const);
+  const helper = Math.abs(normal[2]) > 0.92
+    ? ([1, 0, 0] as const)
+    : ([0, 0, 1] as const);
+  const axisU = normalize3(cross3(helper, normal));
+  const axisV = normalize3(cross3(normal, axisU));
+  const plateCorner = (u: number, v: number) => {
+    const point = [
+      axisU[0] * u + axisV[0] * v,
+      axisU[1] * u + axisV[1] * v,
+      axisU[2] * u + axisV[2] * v,
+    ] as const;
+    return projectPoint(point[0], point[1], point[2]);
+  };
+  const plateSize = 0.72;
+  const chipSize = 0.38;
+  const plate = [
+    plateCorner(-plateSize, -plateSize),
+    plateCorner(plateSize, -plateSize),
+    plateCorner(plateSize, plateSize),
+    plateCorner(-plateSize, plateSize),
+  ];
+  const chip = [
+    plateCorner(-chipSize, -chipSize),
+    plateCorner(chipSize, -chipSize),
+    plateCorner(chipSize, chipSize),
+    plateCorner(-chipSize, chipSize),
+  ];
+  const floorCorners = [
+    projectPoint(-SCENE.extent, -SCENE.extent, SCENE.floorZ),
+    projectPoint(SCENE.extent, -SCENE.extent, SCENE.floorZ),
+    projectPoint(SCENE.extent, SCENE.extent, SCENE.floorZ),
+    projectPoint(-SCENE.extent, SCENE.extent, SCENE.floorZ),
+  ];
+  const grid = [-1.2, -0.8, -0.4, 0, 0.4, 0.8, 1.2];
+  const sceneTitle = active
+    ? `三轴矢量：X ${x.toFixed(2)} g，Y ${y.toFixed(2)} g，Z ${z.toFixed(2)} g`
+    : "三轴矢量：暂无数据";
 
   return (
     <div className="lis3dh-scene" aria-label="三轴加速度立体矢量图">
-      <div className="lis3dh-world">
-        <div className="lis3dh-axis is-x" />
-        <div className="lis3dh-axis is-y" />
-        <div className="lis3dh-axis is-z" />
-        <span className="lis3dh-axis-label is-x">+X</span>
-        <span className="lis3dh-axis-label is-y">+Y</span>
-        <span className="lis3dh-axis-label is-z">+Z</span>
-        <span className="lis3dh-origin" />
-        {Array.from({ length: dots }, (_, index) => {
-          const t = (index + 1) / dots;
-          return (
-            <span
-              key={index}
-              className="lis3dh-vec-dot"
-              style={{
-                transform: `translate3d(${(x * t * scale).toFixed(1)}px, ${
-                  (-z * t * scale).toFixed(1)
-                }px, ${(y * t * scale).toFixed(1)}px)`,
-                opacity: 0.18 + 0.62 * t,
-              }}
+      <div className="lis3dh-scene-badge">
+        <span>|a|</span>
+        <b>{magnitudeLabel}</b>
+        <em>g</em>
+      </div>
+      <div className="lis3dh-scene-flag">等轴测 · {active ? "实时" : "待机"}</div>
+      <svg
+        className="lis3dh-scene-svg"
+        viewBox={`0 0 ${SCENE.width} ${SCENE.height}`}
+        role="img"
+        aria-label={sceneTitle}
+      >
+        <defs>
+          <radialGradient id="lis3dh-floor" cx="50%" cy="50%" r="60%">
+            <stop offset="0%" style={{ stopColor: "var(--accent)", stopOpacity: 0.24 }} />
+            <stop offset="100%" style={{ stopColor: "var(--accent)", stopOpacity: 0 }} />
+          </radialGradient>
+          <linearGradient id="lis3dh-vector" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" style={{ stopColor: "var(--accent)", stopOpacity: 0.25 }} />
+            <stop offset="45%" style={{ stopColor: "var(--accent)", stopOpacity: 0.95 }} />
+            <stop offset="100%" style={{ stopColor: "#ffffff", stopOpacity: 1 }} />
+          </linearGradient>
+          <linearGradient id="lis3dh-plate" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" style={{ stopColor: "var(--accent)", stopOpacity: 0.3 }} />
+            <stop offset="100%" style={{ stopColor: "var(--accent)", stopOpacity: 0.06 }} />
+          </linearGradient>
+          <radialGradient id="lis3dh-tip" cx="35%" cy="30%" r="70%">
+            <stop offset="0%" style={{ stopColor: "#ffffff", stopOpacity: 1 }} />
+            <stop offset="100%" style={{ stopColor: "var(--accent)", stopOpacity: 0.9 }} />
+          </radialGradient>
+          <filter id="lis3dh-glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="3.4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          {SCENE_AXES.map((axis) => (
+            <marker
+              key={axis.key}
+              id={`lis3dh-arrow-${axis.key}`}
+              viewBox="0 0 8 8"
+              refX="6.4"
+              refY="4"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto"
+            >
+              <path d="M0,0 L8,4 L0,8 Z" style={{ fill: axis.color }} />
+            </marker>
+          ))}
+        </defs>
+
+        {/* 地面：渐变底色 + 网格，提供纵深参考 */}
+        <polygon
+          points={polygonPoints(floorCorners)}
+          fill="url(#lis3dh-floor)"
+        />
+        {grid.map((line) => (
+          <g
+            key={`floor-${line}`}
+            stroke="color-mix(in srgb, var(--accent) 22%, var(--border))"
+            strokeWidth="1"
+            opacity={line === 0 ? 0.95 : 0.7}
+          >
+            <line
+              x1={projectPoint(line, -SCENE.extent, SCENE.floorZ).x}
+              y1={projectPoint(line, -SCENE.extent, SCENE.floorZ).y}
+              x2={projectPoint(line, SCENE.extent, SCENE.floorZ).x}
+              y2={projectPoint(line, SCENE.extent, SCENE.floorZ).y}
             />
+            <line
+              x1={projectPoint(-SCENE.extent, line, SCENE.floorZ).x}
+              y1={projectPoint(-SCENE.extent, line, SCENE.floorZ).y}
+              x2={projectPoint(SCENE.extent, line, SCENE.floorZ).x}
+              y2={projectPoint(SCENE.extent, line, SCENE.floorZ).y}
+            />
+          </g>
+        ))}
+
+        {/* 三轴：负方向虚线短桩，正方向带箭头与刻度点 */}
+        {SCENE_AXES.map((axis) => {
+          const [dx, dy, dz] = axis.dir;
+          const back = projectPoint(-dx * 0.5, -dy * 0.5, -dz * 0.5);
+          const front = projectPoint(dx * 1.12, dy * 1.12, dz * 1.12);
+          const label = projectPoint(dx * 1.3, dy * 1.3, dz * 1.3);
+          return (
+            <g key={axis.key}>
+              <line
+                x1={origin.x}
+                y1={origin.y}
+                x2={back.x}
+                y2={back.y}
+                stroke={axis.color}
+                strokeWidth="1.2"
+                strokeDasharray="3 4"
+                opacity="0.32"
+              />
+              <line
+                x1={origin.x}
+                y1={origin.y}
+                x2={front.x}
+                y2={front.y}
+                stroke={axis.color}
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                opacity="0.92"
+                markerEnd={`url(#lis3dh-arrow-${axis.key})`}
+              />
+              {[0.55, 1.0].map((tick) => {
+                const point = projectPoint(dx * tick, dy * tick, dz * tick);
+                return (
+                  <circle
+                    key={tick}
+                    cx={point.x}
+                    cy={point.y}
+                    r="1.6"
+                    fill={axis.color}
+                    opacity="0.6"
+                  />
+                );
+              })}
+              <text
+                x={label.x}
+                y={label.y}
+                fill={axis.color}
+                fontSize="10"
+                fontFamily="'DM Mono', monospace"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                opacity="0.9"
+              >
+                {axis.label}
+              </text>
+            </g>
           );
         })}
-        <span
-          className="lis3dh-vec-tip"
-          style={{
-            transform: `translate3d(${(x * scale).toFixed(1)}px, ${
-              (-z * scale).toFixed(1)
-            }px, ${(y * scale).toFixed(1)}px)`,
-          }}
+
+        {/* 器件板：板面法线 = 重力方向，直观看出模块是怎么斜的 */}
+        <g opacity={active ? 0.95 : 0.4}>
+          <polygon
+            points={polygonPoints(plate)}
+            fill="url(#lis3dh-plate)"
+            stroke="var(--accent)"
+            strokeWidth="1.2"
+            strokeOpacity="0.75"
+            strokeLinejoin="round"
+          />
+          <polygon
+            points={polygonPoints(chip)}
+            fill="var(--accent)"
+            fillOpacity="0.3"
+            stroke="var(--accent)"
+            strokeWidth="1"
+            strokeOpacity="0.85"
+            strokeLinejoin="round"
+          />
+          {[
+            [-0.55, -0.55],
+            [0.55, -0.55],
+            [0.55, 0.55],
+            [-0.55, 0.55],
+          ].map(([u, v]) => {
+            const pad = plateCorner(u, v);
+            return (
+              <circle
+                key={`${u}-${v}`}
+                cx={pad.x}
+                cy={pad.y}
+                r="2.2"
+                fill="var(--accent)"
+                opacity="0.5"
+              />
+            );
+          })}
+        </g>
+
+        {/* 加速度矢量：落地虚线 + 地面投影 + 发光主线与箭头球 */}
+        <g opacity={active && length > 0.02 ? 1 : 0.25}>
+          <line
+            x1={tip.x}
+            y1={tip.y}
+            x2={floorPoint.x}
+            y2={floorPoint.y}
+            stroke="var(--accent)"
+            strokeWidth="1"
+            strokeDasharray="2 4"
+            opacity="0.42"
+          />
+          <ellipse
+            cx={floorPoint.x}
+            cy={floorPoint.y}
+            rx="9"
+            ry="4"
+            fill="var(--accent)"
+            opacity="0.3"
+          />
+          <line
+            x1={origin.x}
+            y1={origin.y}
+            x2={tip.x}
+            y2={tip.y}
+            stroke="url(#lis3dh-vector)"
+            strokeWidth="3.2"
+            strokeLinecap="round"
+            filter="url(#lis3dh-glow)"
+          />
+          {length > 0.02 && (
+            <>
+              <circle
+                cx={tip.x}
+                cy={tip.y}
+                r="9.5"
+                fill="var(--accent)"
+                opacity="0.18"
+              />
+              <circle cx={tip.x} cy={tip.y} r="5.4" fill="url(#lis3dh-tip)" />
+            </>
+          )}
+        </g>
+        <circle
+          cx={origin.x}
+          cy={origin.y}
+          r="2.6"
+          fill="var(--text-muted)"
         />
-      </div>
+      </svg>
       <div className="lis3dh-scene-legend">
-        |a| = <b>{magnitudeLabel} g</b> · 屏幕右 = +X · 屏幕上 = +Z · 屏幕外 = +Y
+        X <b>{active ? formatAxis(g.x, 2) : "—"}</b> · Y{" "}
+        <b>{active ? formatAxis(g.y, 2) : "—"}</b> · Z{" "}
+        <b>{active ? formatAxis(g.z, 2) : "—"}</b> g · X 右下 · Y 左下 · Z 向上
       </div>
     </div>
   );
