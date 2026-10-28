@@ -48,6 +48,9 @@ i2c_web_tool/docs/
 
 webSerialPlotter/dist/
 
+# 私有备份分支运维手册（主分支不入库，仅在私有分支保留）
+GIT_REMOTE_WORKFLOW.md
+
 # 调试环境变量文件（含真实凭据，不入库）
 .env.debug
 
