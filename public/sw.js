@@ -1,13 +1,13 @@
-const CACHE_NAME = "iot-lab-v2";
+const CACHE_NAME = "iot-lab-v4";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
-  "/style.css",
   "/manifest.json",
   "/favicon.ico",
   "/icons/pwa-icon.png",
   "/icons/pwa-192x192.png",
-  "/esp-web-tools.html",
+  "/js/theme.js",
+  "/js/i18n.js",
 ];
 
 // 安装阶段：预缓存静态资源
@@ -49,6 +49,25 @@ self.addEventListener("fetch", (event) => {
   // IoT 实时数据 API → 永远走网络，不缓存
   if (url.pathname.startsWith("/api/")) {
     return; // 默认网络请求
+  }
+
+  // 导航请求（页面）→ 网络优先，离线时回退缓存；避免改了 HTML 用户仍看旧版
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches
+              .open(CACHE_NAME)
+              .then((cache) => cache.put(event.request, clone))
+              .catch(() => {});
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/"))),
+    );
+    return;
   }
 
   // 其他请求 → 缓存优先，失败则回退网络

@@ -54,7 +54,8 @@ app.get("/prefix/", serveStatic({ path: "./实际目录/dist/index.html" }));
 
 1. `src/index.ts` 增加路由；相对 base 的子项目先注册 `app.get("/prefix", ...redirect)`，
    再注册 `/prefix/*`（否则 serveStatic 会抢先返回 index.html，无尾斜杠访问白屏）。
-2. `public/index.html` 首页「项目开发工具」区加卡片；**不要动 hero 3×3 核心入口网格**。
+2. `public/index.html` 首页 `.pieces` 作品卡区加卡片，并在 `public/js/i18n.js` 七种语言里补齐文案；
+   hero 右侧 3×3 核心入口网格保留，不要挤占或删减。
 3. 根 `package.json` 增加 `build:<name>` 并串进 `build`；`scripts/build-all.ts` 的
    `projects` 增加条目（Deno 项目显式写 `install: "deno"`）。
 4. `README.md`、`PROJECT_GUIDE.md`、`ARCHITECTURE.md` 同步路由表、结构树、构建链。

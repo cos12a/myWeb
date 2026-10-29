@@ -5,8 +5,8 @@
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0f0f15",
-  "theme_color": "#0f0f15",
+  "background_color": "#0C0A09",
+  "theme_color": "#0C0A09",
   "categories": ["education", "developer tools", "utilities"],
   "lang": "zh-CN",
   "icons": [
